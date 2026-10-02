@@ -6,13 +6,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 // Auf GitHub Pages liegt die App unter /<Repo-Name>/, lokal unter /.
 export default defineConfig({
   base: process.env.VITE_BASE ?? '/',
-  build: { chunkSizeWarningLimit: 800 },
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
+      // Alte App-Versionen aus dem Cache räumen, damit nichts Veraltetes liegen bleibt.
+      workbox: { cleanupOutdatedCaches: true },
       manifest: {
         name: 'Training',
         short_name: 'Training',

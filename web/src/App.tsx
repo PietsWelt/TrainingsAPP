@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { SkeletonPage } from './components/Skeleton'
 import { Toaster } from './components/Toast'
 import { toast } from './lib/toast'
@@ -7,7 +7,8 @@ import { usePullToRefresh } from './lib/usePullToRefresh'
 import { useSwipeTabs } from './lib/useSwipeTabs'
 import { useDailyLog } from './lib/useDailyLog'
 import type { Session } from '@supabase/supabase-js'
-import { loadDataset, syncAndWait } from './lib/data'
+import { clearCache, readCache, sameData, writeCache } from './lib/cache'
+import { latestRun, loadDataset, syncAndWait } from './lib/data'
 import { dateLabel, relativeTime } from './lib/format'
 import { localToday } from './lib/plan/dates'
 import { supabase } from './lib/supabase'
@@ -17,7 +18,13 @@ import { Login } from './pages/Login'
 import { Plan } from './pages/Plan'
 import { usePlan } from './lib/plan/usePlan'
 import { Today } from './pages/Today'
-import { Trends } from './pages/Trends'
+
+// Trends bringt die Diagramm-Bibliothek mit (etwa die Hälfte des Codes). Sie wird erst geladen,
+// wenn die App steht, damit der Start schnell bleibt und der Wechsel zu Trends trotzdem sofort klappt.
+const loadTrends = () => import('./pages/Trends')
+const Trends = lazy(() => loadTrends().then((m) => ({ default: m.Trends })))
+/** Ohne neuen Sync und innerhalb dieser Zeit wird beim Zurückkehren nicht alles neu geladen. */
+const FRESH_MS = 5 * 60_000
 
 type Tab = 'today' | 'plan' | 'trends' | 'activities'
 const TABS: Tab[] = ['today', 'plan', 'trends', 'activities']
@@ -29,7 +36,10 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    const { data } = supabase.auth.onAuthStateChange((e, s) => {
+      if (e === 'SIGNED_OUT') clearCache()
+      setSession(s)
+    })
     return () => data.subscription.unsubscribe()
   }, [])
 
@@ -40,18 +50,24 @@ export default function App() {
 
 function Main() {
   const [tab, setTab] = useState<Tab>('today')
-  const [data, setData] = useState<Dataset | null>(null)
+  // Sofort der letzte Stand vom Gerät, frische Daten kommen im Hintergrund.
+  const [data, setData] = useState<Dataset | null>(readCache)
+  const [day, setDay] = useState(localToday)
+  const loadedAt = useRef(0)
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
-  const plan = usePlan(data?.activities)
+  const plan = usePlan(data?.activities, day)
   const log = useDailyLog()
 
   const refresh = useCallback(
     () =>
       loadDataset()
       .then((d) => {
-        setData(d)
+        loadedAt.current = Date.now()
+        // Unveränderte Daten behalten das alte Objekt: Plan und Diagramme rechnen dann nicht neu.
+        setData((prev) => (sameData(prev, d) ? prev : d))
+        writeCache(d)
         setError(null)
       })
       .catch((e: Error) => setError(e.message)),
@@ -60,9 +76,13 @@ function Main() {
 
   useEffect(() => {
     void refresh()
+    // Trends im Leerlauf vorladen.
+    const id = setTimeout(() => void loadTrends(), 1500)
+    return () => clearTimeout(id)
   }, [refresh])
   // Runterziehen startet wie der Knopf oben einen echten Garmin-Sync, nicht nur ein Neuladen.
-  const ptr = usePullToRefresh(() => {
+  const pullRef = useRef<HTMLDivElement>(null)
+  const ptr = usePullToRefresh(pullRef, () => {
     if (!syncing) void syncNow()
     return Promise.resolve()
   })
@@ -79,9 +99,22 @@ function Main() {
     selectTab(t)
   })
 
-  // Beim Zurückkehren in die App neu laden (z.B. nach einem Lauf).
+  // Beim Zurückkehren in die App (z.B. nach einem Lauf) erst kurz nachsehen, ob ein neuer Sync gelaufen ist.
+  // Nur dann wird alles neu geladen; das spart meist ein Dutzend Abfragen.
+  const lastSyncRef = useRef(data?.lastSync)
   useEffect(() => {
-    const onVisible = () => document.visibilityState === 'visible' && void refresh()
+    lastSyncRef.current = data?.lastSync
+  }, [data])
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return
+      setDay(localToday())
+      if (Date.now() - loadedAt.current < FRESH_MS) return
+      const run = await latestRun().catch(() => undefined)
+      const known = lastSyncRef.current
+      if (run && known && run.id === known.id && run.status === known.status) loadedAt.current = Date.now()
+      else void refresh()
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [refresh])
@@ -120,12 +153,16 @@ function Main() {
       </header>
 
       <main ref={mainRef} className="px-4 pt-1 will-change-transform" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 100px)' }}>
-        <PullIndicator pull={ptr.pull} ready={ptr.ready} busy={ptr.busy} />
+        <PullIndicator ref={pullRef} ready={ptr.ready} busy={ptr.busy} />
         {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
         {!data && !error && <SkeletonPage />}
         {data && tab === 'today' && <Today data={data} plan={plan} log={log} onOpenActivity={setOpenId} onOpenPlan={() => selectTab('plan')} />}
         {data && tab === 'plan' && <Plan plan={plan} activities={data.activities} records={data.records} predictions={data.predictions} garminRaces={data.garminRaces} />}
-        {data && tab === 'trends' && <Trends data={data} drinks={log.drinks} gym={log.gym} plan={plan} />}
+        {data && tab === 'trends' && (
+          <Suspense fallback={<SkeletonPage />}>
+            <Trends data={data} drinks={log.drinks} gym={log.gym} plan={plan} />
+          </Suspense>
+        )}
         {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
       </main>
 
@@ -158,10 +195,10 @@ function SyncDot({ data }: { data: Dataset | null }) {
   return <span className="absolute top-2 right-2 h-2 w-2 rounded-full" style={{ background: 'var(--critical)' }} aria-hidden />
 }
 
-function PullIndicator({ pull, ready, busy }: { pull: number; ready: boolean; busy: boolean }) {
-  if (!pull && !busy) return null
+/** Die Höhe setzt usePullToRefresh direkt am Element. */
+function PullIndicator({ ref, ready, busy }: { ref: Ref<HTMLDivElement>; ready: boolean; busy: boolean }) {
   return (
-    <div className="flex items-center justify-center overflow-hidden text-xs text-ink-3" style={{ height: busy ? 36 : pull * 0.6 }} role="status">
+    <div ref={ref} className="flex items-center justify-center overflow-hidden text-xs text-ink-3" style={busy ? { height: 36 } : { height: 0 }} role="status" aria-hidden={!busy}>
       {busy ? 'Aktualisiere …' : ready ? 'Loslassen zum Aktualisieren' : 'Zum Aktualisieren ziehen'}
     </div>
   )

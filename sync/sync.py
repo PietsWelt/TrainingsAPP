@@ -11,7 +11,6 @@ import logging
 import os
 import sys
 import tempfile
-import traceback
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -56,7 +55,8 @@ def safe(fn: Callable[[], Any], what: str) -> Any:
     try:
         return fn()
     except Exception as e:  # noqa: BLE001
-        log.warning("%s fehlgeschlagen: %s", what, e)
+        # Nur den Fehlertyp loggen: Die Actions-Logs sind öffentlich.
+        log.warning("%s fehlgeschlagen: %s", what, type(e).__name__)
         return None
 
 
@@ -198,7 +198,7 @@ def main() -> int:
         log.info("Fertig: %d Aktivitäten, %d Tage", n_act, n_days)
         return 0
     except Exception as e:  # noqa: BLE001
-        traceback.print_exc()
+        log.error("Sync fehlgeschlagen: %s (Details in sync_runs)", type(e).__name__)
         db.update(
             "sync_runs",
             {"id": run["id"]},

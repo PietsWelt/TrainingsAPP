@@ -1,6 +1,6 @@
 import { Card, Ring, Section, SportIcon, Stat, StatusLabel, type Status } from '../components/ui'
 import { RecordsCard, WeekCard } from './TodayTraining'
-import { ZoneBar } from '../components/charts'
+import { ZoneBar } from '../components/ZoneBar'
 import { hrvState, restingHrDelta, weeklyTotals } from '../lib/derive'
 import { dateLabel, duration, hoursMin, km, speed, sportGroup, sportLabel } from '../lib/format'
 import type { Dataset } from '../lib/types'

@@ -143,14 +143,14 @@ def _delete(client: Any, workout_id: int) -> None:
         client.delete_workout(workout_id)
     except Exception as e:  # noqa: BLE001
         # Schon gelöscht (z.B. von Hand in Garmin Connect) ist kein Fehler.
-        log.info("Workout %s nicht gelöscht: %s", workout_id, e)
+        log.info("Workout nicht gelöscht: %s", type(e).__name__)
 
 
 def _upload(client: Any, row: dict[str, Any]) -> int:
     try:
         res = client.upload_workout(garmin_workout(row))
     except Exception as e:  # noqa: BLE001
-        log.warning("Upload mit Zieltempo abgelehnt (%s), versuche ohne.", e)
+        log.warning("Upload mit Zieltempo abgelehnt (%s), versuche ohne.", type(e).__name__)
         res = client.upload_workout(garmin_workout(row, with_targets=False))
     workout_id = int(res["workoutId"])
     client.schedule_workout(workout_id, row["date"])
@@ -185,7 +185,7 @@ def push_workouts(client: Any, db: Supabase, today: date, days: int) -> dict[str
                 new = _upload(client, row)
             except Exception as e:  # noqa: BLE001
                 stats["failed"] += 1
-                log.warning("Einheit %s (%s) nicht übertragen: %s", row["title"], row["date"], e)
+                log.warning("Einheit nicht übertragen: %s", type(e).__name__)
                 if stats["failed"] >= 3 and not stats["uploaded"]:
                     # Ohne vollständigen Abgleich nichts als Waise löschen.
                     log.warning("Übertragung auf die Uhr abgebrochen.")
