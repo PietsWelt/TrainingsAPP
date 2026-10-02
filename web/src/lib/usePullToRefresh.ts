@@ -10,6 +10,7 @@ export function usePullToRefresh(onRefresh: () => Promise<unknown>, enabled = tr
   const [pull, setPull] = useState(0)
   const [busy, setBusy] = useState(false)
   const startY = useRef<number | null>(null)
+  const startX = useRef(0)
   const pullRef = useRef(0)
   const cb = useRef(onRefresh)
   useEffect(() => {
@@ -21,12 +22,16 @@ export function usePullToRefresh(onRefresh: () => Promise<unknown>, enabled = tr
     const down = (e: TouchEvent) => {
       // Nicht in geöffneten Detailansichten, die scrollen selbst.
       const inSheet = (e.target as Element | null)?.closest?.('.sheet-in')
+      startX.current = e.touches[0].clientX
       startY.current = window.scrollY <= 0 && !busy && !inSheet ? e.touches[0].clientY : null
     }
     const move = (e: TouchEvent) => {
       if (startY.current == null) return
       const d = e.touches[0].clientY - startY.current
-      if (d <= 0 || window.scrollY > 0) {
+      // Waagerechtes Wischen wechselt die Seite, das ist kein Runterziehen.
+      const dx = Math.abs(e.touches[0].clientX - startX.current)
+      if (dx > 12 && dx > Math.abs(d)) startY.current = null
+      if (startY.current == null || d <= 0 || window.scrollY > 0) {
         pullRef.current = 0
         setPull(0)
         return
