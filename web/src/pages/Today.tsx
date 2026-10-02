@@ -18,6 +18,7 @@ import { ProposalCard, ReadinessCard } from './TodayReadiness'
 import { CheckInCard } from './CheckIn'
 import { FeedbackCard } from './PlanFeedback'
 import { MobilityCard } from './Mobility'
+import { StrengthCard } from './Strength'
 import { HeatCard } from './Heat'
 import { WeekReviewCard } from './WeekReview'
 
@@ -60,6 +61,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
       <HeatCard workout={plan.workouts.find((w) => w.date === today && w.sport === 'run' && w.status === 'planned')} />
       <FeedbackCard plan={plan} today={today} activities={data.activities} />
       <MobilityCard activities={data.activities} today={today} />
+      <StrengthCard workouts={plan.workouts} log={log} today={today} />
       <WeekReviewCard data={data} plan={plan} log={log} />
       {!own && readiness != null && (
         <Card className="p-5">
