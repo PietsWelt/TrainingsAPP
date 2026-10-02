@@ -92,6 +92,17 @@ export function demoDataset(): Dataset {
       last.temp_c = Math.round((13 + 10 * season + (last.id % 7) - 3) * 10) / 10
       last.dew_point_c = Math.round((last.temp_c - 7 + (last.id % 4)) * 10) / 10
       if (isRun) last.gap_factor = Math.round((1 + ((last.elevation_gain_m ?? 0) / distM) * 3) * 1000) / 1000
+      // Brustgurt bei den meisten Läufen der letzten 8 Wochen.
+      if (isRun && i < 56 && last.id % 3 !== 0) {
+        const c = last.avg_hr! - (last.avg_hr! % 5)
+        last.hr_source = 'strap'
+        last.hr_hist = { [c - 10]: Math.round(dur * 0.15), [c - 5]: Math.round(dur * 0.2), [c]: Math.round(dur * 0.35), [c + 5]: Math.round(dur * 0.2), [c + 10]: Math.round(dur * 0.1) }
+        last.dfa_a1 = Math.round((hard ? 0.5 + (last.id % 3) * 0.05 : 0.95 + (last.id % 4) * 0.05) * 100) / 100
+        if (hard || dow === 6) {
+          last.aet_hr = 147 + (last.id % 5) - Math.round(i / 28)
+          last.aet_speed_mps = Math.round((1000 / (352 - fitness * 12 + (last.id % 3) * 3)) * 1000) / 1000
+        }
+      }
     }
   }
 

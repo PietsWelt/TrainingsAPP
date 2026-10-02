@@ -14,7 +14,7 @@ const RUN_COLS = 'id,trigger,started_at,finished_at,status,message'
 export async function loadDataset(days = 180): Promise<Dataset> {
   if (!supabase) return demoDataset()
   const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10)
-  const [a, d, s, records, drift, predictions, races] = await Promise.all([
+  const [a, d, s, records, drift, predictions, races, strap] = await Promise.all([
     supabase.from('activities').select(ACTIVITY_COLS).gte('local_date', since).order('start_time', { ascending: false }),
     supabase.from('daily_metrics').select(DAY_COLS).gte('date', since).order('date'),
     supabase.from('sync_runs').select(RUN_COLS).order('started_at', { ascending: false }).limit(1),
@@ -22,10 +22,12 @@ export async function loadDataset(days = 180): Promise<Dataset> {
     loadExtras(since),
     supabase.from('race_predictions').select('date,time_5k,time_10k,time_half,time_marathon').gte('date', since).order('date'),
     supabase.from('garmin_races').select('id,name,date,distance_m,sport').order('date'),
+    loadStrap(since),
   ])
   const err = a.error ?? d.error ?? s.error
   if (err) throw new Error(err.message)
-  const extras = new Map(drift.map((x) => [x.id, x]))
+  const extras = new Map<number, Partial<Activity>>(drift.map((x) => [x.id, x]))
+  for (const x of strap) extras.set(x.id!, { ...extras.get(x.id!), ...x })
   return {
     activities: (a.data as Activity[]).map((x) => (extras.has(x.id) ? { ...x, ...extras.get(x.id) } : x)),
     days: d.data as DailyMetrics[],
@@ -48,6 +50,14 @@ async function loadExtras(since: string): Promise<Extra[]> {
   if (!full.error) return full.data as Extra[]
   const drift = await sb.from('activities').select('id,decoupling_pct').gte('local_date', since).not('decoupling_pct', 'is', null)
   return drift.error ? [] : (drift.data as Extra[])
+}
+
+const STRAP_COLS = 'id,hr_source,hr_hist,dfa_a1,aet_hr,aet_speed_mps'
+
+/** Brustgurt-Auswertung aus der Original-Datei (Migration 0012). Ohne die Spalten einfach nichts. */
+async function loadStrap(since: string): Promise<Partial<Activity>[]> {
+  const { data, error } = await supabase!.from('activities').select(STRAP_COLS).gte('local_date', since).not('hr_source', 'is', null)
+  return error ? [] : (data as Partial<Activity>[])
 }
 
 /** Bestzeiten über die ganze gesyncte Historie, nicht nur die geladenen 180 Tage. Fehler sind nie fatal. */

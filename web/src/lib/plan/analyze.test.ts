@@ -80,3 +80,32 @@ describe('Hitze und Hügel', () => {
     expect(r?.reasons.at(-1)).toMatch(/hügelig/)
   })
 })
+
+describe('Brustgurt', () => {
+  // Frühere Läufe mit geschätzter aerober Schwelle um 150 bpm.
+  const history = [148, 150, 152].map((hr, i) => act([], { id: 100 + i, local_date: `2026-09-${10 + i}`, aet_hr: hr }))
+  const hist = (bins: Record<string, number>) => ({ hr_source: 'strap' as const, hr_hist: bins })
+
+  it('bewertet lockere Läufe an der eigenen Schwelle statt an Garmins Zonen', () => {
+    // Laut Garmin viel Zone 4, aber kaum über Schwelle + 5 (155 bpm): passt.
+    const a = act([0, 0.2, 0.3, 0.5, 0], hist({ '140': 1500, '145': 1000, '150': 400, '155': 100 }))
+    const r = analyzeRun(easy, a, [...history, a])!
+    expect(r.verdict).toBe('ok')
+    expect(r.reasons[0]).toMatch(/150 bpm/)
+  })
+  it('zu hart, wenn viel Zeit deutlich über der Schwelle liegt', () => {
+    const a = act([0, 0.4, 0.4, 0.2, 0], hist({ '145': 1500, '155': 900, '160': 600 }))
+    expect(analyzeRun(easy, a, [...history, a])!.verdict).toBe('hard')
+  })
+  it('ohne Schätzung gelten Zonen, aber viel Zone 5 ist dann kein Messfehler', () => {
+    const a = act([0, 0.1, 0.1, 0.2, 0.6], { hr_source: 'strap' })
+    expect(analyzeRun(easy, a, [a])!.verdict).toBe('hard')
+    expect(analyzeRun(easy, { ...a, hr_source: 'wrist' }, [a])).toBeNull()
+  })
+  it('Tempolauf mit viel Zone 5 ist mit Gurt zu hart, außer er fühlte sich nur mittel an', () => {
+    const a = act([0, 0, 0.2, 0.4, 0.4], { hr_source: 'strap', aerobic_te: 4 })
+    expect(analyzeRun(tempo, a)!.verdict).toBe('hard')
+    expect(analyzeRun(tempo, { ...a, rpe: 50 })!.verdict).toBe('ok')
+    expect(analyzeRun(tempo, { ...a, hr_source: 'wrist' })!.verdict).toBe('ok')
+  })
+})

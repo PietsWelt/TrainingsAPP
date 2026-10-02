@@ -85,6 +85,18 @@ function conditionRows(a: Activity): [string, string][] {
   return rows
 }
 
+/** Brustgurt-Werte aus der Original-Datei (sync/fitfile.py). */
+function strapRows(a: Activity): [string, string][] {
+  if (!a.hr_source) return []
+  const rows: [string, string][] = [['Pulsquelle', a.hr_source === 'strap' ? 'Brustgurt' : 'Handgelenk']]
+  if (a.dfa_a1 != null) rows.push(['Ø DFA-alpha1', `${a.dfa_a1.toLocaleString('de-DE')} ${a.dfa_a1 >= 0.75 ? '(aerob)' : '(über der Schwelle)'}`])
+  if (a.aet_hr != null) {
+    rows.push(['Aerobe Schwelle', `${Math.round(a.aet_hr)} bpm`])
+    if (a.aet_speed_mps) rows.push(['Pace an der Schwelle', speed(a.aet_speed_mps, a.sport)])
+  }
+  return rows
+}
+
 export function ActivityDetail({ activity: a, onClose }: { activity: Activity; onClose: () => void }) {
   const g = sportGroup(a.sport)
   const rows: [string, string][] = [
@@ -98,6 +110,7 @@ export function ActivityDetail({ activity: a, onClose }: { activity: Activity; o
     ...(a.decoupling_pct != null ? ([['Puls-Drift', `${a.decoupling_pct.toLocaleString('de-DE')} % ${a.decoupling_pct <= 5 ? '(stabil)' : '(hoch)'}`]] as [string, string][]) : []),
     ['Kalorien', a.calories != null ? `${Math.round(a.calories)} kcal` : '–'],
     ...conditionRows(a),
+    ...strapRows(a),
   ]
   return (
     <Sheet onClose={onClose}>
@@ -132,6 +145,12 @@ export function ActivityDetail({ activity: a, onClose }: { activity: Activity; o
             ))}
           </dl>
         </Card>
+        {a.dfa_a1 != null && (
+          <p className="px-1 text-xs leading-relaxed text-ink-3">
+            DFA-alpha1 misst aus jedem einzelnen Herzschlag, wie geordnet der Puls schwankt. Über 0,75 lagst du unter deiner aeroben Schwelle, darunter
+            darüber (Rogers et al. 2021). Mehr dazu unter Trends.
+          </p>
+        )}
         {a.hr_zones_s && (
           <Card title="Zeit in Herzfrequenz-Zonen">
             <ZoneBar zones={a.hr_zones_s} />
