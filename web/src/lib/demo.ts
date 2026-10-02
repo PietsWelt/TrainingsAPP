@@ -93,6 +93,7 @@ export function demoDataset(): Dataset {
   return {
     activities,
     days,
+    garminRaces: [{ id: 1, name: 'Stadtlauf Halbmarathon', date: new Date(Date.now() + 140 * 86400_000).toISOString().slice(0, 10), distance_m: 21097.5, sport: 'running' }],
     predictions: [{ date: days.at(-1)!.date, time_5k: 1225, time_10k: 2560, time_half: 5690, time_marathon: 12050 }],
     records: mergeBests(
       [

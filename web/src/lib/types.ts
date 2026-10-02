@@ -1,3 +1,4 @@
+import type { GarminRace } from './garminRaces'
 import type { Best } from './records'
 
 export interface Activity {
@@ -63,6 +64,8 @@ export interface Dataset {
   records?: Best[]
   /** Garmins Rennzeit-Prognose pro Tag (Sekunden). */
   predictions?: RacePrediction[]
+  /** Rennen aus dem Garmin-Kalender (Migration 0009). */
+  garminRaces?: GarminRace[]
 }
 
 export interface RacePrediction {

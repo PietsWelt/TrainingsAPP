@@ -19,7 +19,7 @@ from typing import Any, Callable
 from garminconnect import Garmin
 
 from db import Supabase
-from mapping import activity_row, daily_row, decoupling, pr_row, prediction_row
+from mapping import activity_row, daily_row, decoupling, pr_row, prediction_row, race_row
 from watch import push_workouts
 
 log = logging.getLogger("sync")
@@ -143,6 +143,27 @@ def sync_prediction(client: Garmin, db: Supabase, today: date) -> bool:
     return row is not None
 
 
+RACE_MONTHS = 12
+
+
+def sync_races(client: Garmin, db: Supabase, today: date) -> int:
+    """Rennen aus dem Garmin-Kalender der nächsten 12 Monate."""
+    rows: list[dict[str, Any]] = []
+    types: set[str] = set()
+    for i in range(RACE_MONTHS + 1):
+        y, m = divmod(today.month - 1 + i, 12)
+        cal = client.get_scheduled_workouts(today.year + y, m + 1) or {}
+        for item in cal.get("calendarItems") or []:
+            types.add(str(item.get("itemType")))
+            row = race_row(item)
+            if row and row["date"] >= today.isoformat():
+                rows.append(row)
+    # Nur Eintragstypen ins Log, keine Namen oder Daten: die Logs sind öffentlich.
+    log.info("Kalender-Typen: %s, Rennen: %d", sorted(types), len(rows))
+    db.upsert("garmin_races", rows, "id")
+    return len(rows)
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     db = Supabase()
@@ -154,6 +175,10 @@ def main() -> int:
         n_days = sync_days(client, db, days_to_sync(db, today))
         safe(lambda: sync_records(client, db), "Bestzeiten")
         safe(lambda: sync_prediction(client, db, today), "Rennzeit-Prognose")
+        # Kalender alle 2 Stunden prüfen, das spart Anfragen bei Garmin.
+        now = datetime.now(timezone.utc)
+        if now.hour % 2 == 0 and now.minute < 30 or os.getenv("RACES_ALWAYS"):
+            safe(lambda: sync_races(client, db, today), "Rennen aus dem Kalender")
         drift = safe(lambda: sync_drift(client, db), "Puls-Drift")
         if drift:
             log.info("Puls-Drift: %d Läufe ausgewertet", drift)
