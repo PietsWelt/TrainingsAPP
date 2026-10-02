@@ -3,6 +3,7 @@ import { SkeletonPage } from './components/Skeleton'
 import { Toaster } from './components/Toast'
 import { toast } from './lib/toast'
 import { usePullToRefresh } from './lib/usePullToRefresh'
+import { useDailyLog } from './lib/useDailyLog'
 import type { Session } from '@supabase/supabase-js'
 import { loadDataset, triggerSync } from './lib/data'
 import { relativeTime } from './lib/format'
@@ -40,6 +41,7 @@ function Main() {
   const [syncing, setSyncing] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
   const plan = usePlan(data?.activities)
+  const log = useDailyLog()
 
   const refresh = useCallback(
     () =>
@@ -105,9 +107,9 @@ function Main() {
         <PullIndicator pull={ptr.pull} ready={ptr.ready} busy={ptr.busy} />
         {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
         {!data && !error && <SkeletonPage />}
-        {data && tab === 'today' && <Today data={data} plan={plan} onOpenActivity={setOpenId} onOpenPlan={() => selectTab('plan')} />}
+        {data && tab === 'today' && <Today data={data} plan={plan} log={log} onOpenActivity={setOpenId} onOpenPlan={() => selectTab('plan')} />}
         {data && tab === 'plan' && <Plan plan={plan} />}
-        {data && tab === 'trends' && <Trends data={data} />}
+        {data && tab === 'trends' && <Trends data={data} drinks={log.drinks} />}
         {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
       </main>
 

@@ -18,6 +18,8 @@ export interface PlanState {
   deleteEvent(id: string): Promise<void>
   setStatus(w: PlanWorkout, status: PlanWorkout['status']): Promise<void>
   skip(w: PlanWorkout): Promise<string>
+  /** Speichert beliebige geänderte Einheiten (z.B. Anpassung an die Readiness). */
+  applyChanges(changed: PlanWorkout[]): Promise<void>
 }
 
 // Nur diese Felder ändern den Plan; Name und Notizen nicht.
@@ -86,6 +88,10 @@ export function usePlan(activities: Activity[] | undefined): PlanState {
       const changed = { ...w, status, activity_id: status === 'done' ? w.activity_id : null }
       await planStore.updateWorkouts([changed])
       apply([changed])
+    },
+    async applyChanges(changed) {
+      await planStore.updateWorkouts(changed)
+      apply(changed)
     },
     async skip(w) {
       const { changed, message } = skipWorkout(workouts, w.id, localToday())

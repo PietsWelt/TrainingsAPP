@@ -21,7 +21,8 @@ export function demoDataset(): Dataset {
     const d = new Date(today.getTime() - i * 86400_000)
     const date = d.toISOString().slice(0, 10)
     const fitness = 1 - i / 400 // langsam besser werdend
-    const badNight = r() < 0.1
+    // Die letzte Nacht ist im Demo schlecht, damit man die Anpassung des Plans sieht.
+    const badNight = r() < 0.1 || i === 0
     const sleep = Math.round((badNight ? 5.2 : 7 + r() * 1.4) * 3600)
     const hrv = Math.round(52 + fitness * 8 + (r() - 0.5) * 12 - (badNight ? 10 : 0))
     days.push({

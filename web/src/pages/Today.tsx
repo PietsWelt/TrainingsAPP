@@ -9,15 +9,21 @@ import type { PlanWorkout } from '../lib/plan/types'
 import { tap } from '../lib/haptics'
 import { toast } from '../lib/toast'
 import { workoutAmount } from '../lib/plan/labels'
+import { useMemo } from 'react'
+import { readinessFor } from '../lib/readiness'
+import type { DailyLogState } from '../lib/useDailyLog'
+import { AlcoholCard, ProposalCard, ReadinessCard } from './TodayReadiness'
 
-function readinessStatus(score: number): { status: Status; text: string } {
+function garminStatus(score: number): { status: Status; text: string } {
   if (score >= 75) return { status: 'good', text: 'Bereit für Belastung' }
   if (score >= 50) return { status: 'warning', text: 'Moderat trainieren' }
   if (score >= 25) return { status: 'serious', text: 'Eher locker' }
   return { status: 'critical', text: 'Erholung' }
 }
 
-export function Today({ data, plan, onOpenActivity, onOpenPlan }: { data: Dataset; plan: PlanState; onOpenActivity: (id: number) => void; onOpenPlan: () => void }) {
+export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: Dataset; plan: PlanState; log: DailyLogState; onOpenActivity: (id: number) => void; onOpenPlan: () => void }) {
+  const today = localToday()
+  const own = useMemo(() => readinessFor(today, data.days, data.activities, log.drinks), [today, data, log.drinks])
   const day = data.days.at(-1)
   const lastNight = [...data.days].reverse().find((d) => d.sleep_s)
   const hrv = hrvState(day)
@@ -38,17 +44,19 @@ export function Today({ data, plan, onOpenActivity, onOpenPlan }: { data: Datase
 
   return (
     <div className="space-y-3">
+      {own && <ReadinessCard r={own} garmin={readiness} />}
+      <ProposalCard plan={plan} r={own} today={today} />
       <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
-      {readiness != null && (
+      {!own && readiness != null && (
         <Card>
           <div className="flex items-center gap-4">
             <ReadinessRing value={readiness} />
             <div>
               <div className="text-xs font-medium text-ink-2">Training Readiness (Garmin)</div>
               <div className="mt-1 text-lg font-semibold">
-                <StatusLabel status={readinessStatus(readiness).status}>{readinessStatus(readiness).text}</StatusLabel>
+                <StatusLabel status={garminStatus(readiness).status}>{garminStatus(readiness).text}</StatusLabel>
               </div>
-              <div className="mt-1 text-xs text-ink-3">Eigener Readiness-Score folgt in Etappe 3</div>
+              <div className="mt-1 text-xs text-ink-3">Deine eigene Readiness erscheint, sobald Schlaf oder HRV von heute da sind.</div>
             </div>
           </div>
         </Card>
@@ -78,6 +86,8 @@ export function Today({ data, plan, onOpenActivity, onOpenPlan }: { data: Datase
           hint={day?.body_battery_low != null ? `Tiefstwert ${day.body_battery_low}` : undefined}
         />
       </div>
+
+      <AlcoholCard log={log} today={today} />
 
       {sleepTotal > 0 && (
         <Card title="Schlafphasen" subtitle={lastNight && dateLabel(lastNight.date, { weekday: 'long', day: 'numeric', month: 'long' })}>

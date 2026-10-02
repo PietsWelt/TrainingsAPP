@@ -25,6 +25,20 @@ export function WeeklyDistanceChart({ data }: { data: { week: string; km: number
   )
 }
 
+export function WeeklyDrinksChart({ data }: { data: { week: string; drinks: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={150}>
+      <BarChart data={data} margin={{ top: 8, right: 0, left: -12, bottom: 0 }}>
+        {grid}
+        <XAxis dataKey="week" tickFormatter={shortDate} {...axis} minTickGap={16} />
+        <YAxis {...axis} width={44} allowDecimals={false} />
+        <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={weekLabel} valueFormat={(v) => `${v} ${v === 1 ? 'Getränk' : 'Getränke'}`} />} />
+        <Bar isAnimationActive={false} dataKey="drinks" name="Alkohol" fill="var(--series-4)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
 const SPORT_SERIES = [
   { key: 'run', label: 'Laufen', color: 'var(--series-1)' },
   { key: 'bike', label: 'Rad', color: 'var(--series-2)' },

@@ -22,7 +22,7 @@ Garmin Connect ──(python-garminconnect, alle 30 min + Knopf)──► GitHub
 
 ### 1. Supabase
 1. Auf [supabase.com](https://supabase.com) kostenloses Projekt anlegen (Region Frankfurt).
-2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql` und `0002_plan.sql` einfügen, jeweils **Run**.
+2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql` und `0003_readiness.sql` einfügen, jeweils **Run**.
 3. **Authentication → Users → Add user**: deine E-Mail und ein Passwort (das ist der App-Login, nicht Garmin).
 4. **Authentication → Sign In / Providers**: „Allow new users to sign up“ **ausschalten**. Damit bist du der einzige Nutzer.
 5. **Project Settings → API**: `Project URL` (z.B. `https://xxxx.supabase.co`, ohne `/rest/v1`), `anon`-Key und `service_role`-Key notieren.
