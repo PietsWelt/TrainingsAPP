@@ -37,6 +37,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+          WATCH_DAYS: ${{ vars.WATCH_DAYS || '7' }}
           SYNC_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger || 'schedule' }}
         run: python sync.py
       # GitHub schaltet Zeitpläne in öffentlichen Repos nach 60 Tagen ohne Commits ab.

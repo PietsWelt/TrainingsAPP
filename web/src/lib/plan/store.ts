@@ -22,12 +22,18 @@ function check<T>(r: { data: T | null; error: { message: string } | null }): T {
   return r.data as T
 }
 
-let originalColumn = true
+// Spalten aus späteren Migrationen (0003, 0004). Fehlen sie, läuft der Plan ohne die jeweilige Funktion.
+const OPTIONAL = ['original', 'steps', 'feedback', 'garmin_workout_id'] as const
+const missing = new Set<string>()
+export const hasColumn = (c: (typeof OPTIONAL)[number]) => !missing.has(c)
+
 // Felder, die es in der Datenbank (noch) nicht gibt, nicht mitschicken.
-function strip<T extends { original?: unknown }>(w: T): T {
-  if (originalColumn) return w
-  const { original: _ignored, ...rest } = w
-  return rest as T
+// garmin_workout_id schreibt nur der Sync; die App würde sonst einen veralteten Wert zurückschreiben.
+function strip<T extends object>(w: T): T {
+  const out = { ...w } as Record<string, unknown>
+  delete out.garmin_workout_id
+  for (const k of missing) delete out[k]
+  return out as T
 }
 
 const supabaseStore = (): PlanStore => {
@@ -43,13 +49,13 @@ const supabaseStore = (): PlanStore => {
       check(await db.from('events').delete().eq('id', id))
     },
     async listWorkouts() {
-      const r = await db.from('plan_workouts').select(`${WORKOUT_COLS},original`).order('date')
-      // Ohne Migration 0003 fehlt die Spalte; der Plan funktioniert dann ohne Rückgängig-Funktion.
-      if (r.error && /original/.test(r.error.message)) {
-        originalColumn = false
-        return check(await db.from('plan_workouts').select(WORKOUT_COLS).order('date')) as PlanWorkout[]
+      for (;;) {
+        const cols = [WORKOUT_COLS, ...OPTIONAL.filter((c) => !missing.has(c))].join(',')
+        const r = await db.from('plan_workouts').select(cols).order('date')
+        const gone = r.error && OPTIONAL.find((c) => !missing.has(c) && new RegExp(`\\b${c}\\b`).test(r.error!.message))
+        if (!gone) return check(r) as unknown as PlanWorkout[]
+        missing.add(gone)
       }
-      return check(r) as PlanWorkout[]
     },
     async replaceFrom(eventId, from, workouts) {
       check(await db.from('plan_workouts').delete().eq('event_id', eventId).gte('date', from))

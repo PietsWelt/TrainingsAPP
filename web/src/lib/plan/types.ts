@@ -42,6 +42,23 @@ export type Kind =
   | 'race'
 export type Phase = 'base' | 'build' | 'peak' | 'taper'
 export type WorkoutStatus = 'planned' | 'done' | 'skipped'
+export type Feedback = 'easy' | 'ok' | 'hard'
+
+/** Ein Schritt für die Uhr. Ohne Zeit und Strecke endet er per Runden-Taste. */
+export interface WorkStep {
+  type: 'warmup' | 'run' | 'recover' | 'cooldown'
+  time_s?: number
+  m?: number
+  /** Zieltempo in s/km (die Uhr bekommt ein Fenster von ±5 s). */
+  pace?: number
+  note?: string
+}
+export interface RepeatStep {
+  type: 'repeat'
+  times: number
+  steps: WorkStep[]
+}
+export type Step = WorkStep | RepeatStep
 
 export interface PlanWorkout {
   id: string
@@ -60,7 +77,13 @@ export interface PlanWorkout {
   activity_id: number | null
   moved_from: string | null
   /** Ursprüngliche Werte, falls die Einheit wegen niedriger Readiness angepasst wurde. */
-  original?: Pick<PlanWorkout, 'kind' | 'title' | 'description' | 'duration_min' | 'distance_km' | 'key_session' | 'status'> | null
+  original?: Pick<PlanWorkout, 'kind' | 'title' | 'description' | 'duration_min' | 'distance_km' | 'key_session' | 'status' | 'steps'> | null
+  /** Aufbau für die Uhr (nur bei strukturierten Einheiten). */
+  steps?: Step[] | null
+  /** Eigene Einschätzung nach der Einheit. */
+  feedback?: Feedback | null
+  /** Gesetzt, sobald der Sync die Einheit in Garmin Connect angelegt hat. */
+  garmin_workout_id?: number | null
 }
 
 /** Aktueller Trainingsstand, abgeleitet aus den letzten 6 Wochen Garmin-Daten. */

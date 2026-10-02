@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { autoComplete, progressOf, readinessProposal, restoreOriginal, skipWorkout } from './adapt'
+import { autoComplete, giveFeedback, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
+import { stepLines } from './labels'
 import { generatePlan, pacesFor, phasesFor, volumesFor } from './generate'
 import type { Readiness } from '../readiness'
 import type { Fitness, PlanWorkout, RaceEvent } from './types'
@@ -223,5 +224,57 @@ describe('readinessProposal', () => {
     const changed = prop.options[0].changed[0]
     const after = p.map((w) => (w.id === changed.id ? changed : w))
     expect(readinessProposal(after, hardDay, low(42, 'serious'))).toBeNull()
+  })
+})
+
+describe('steps for the watch', () => {
+  const plan = generatePlan(ev(), fit, TODAY, id)
+  it('gives every hard run a warm-up, a repeat block with target pace and a cool-down', () => {
+    const iv = plan.find((w) => w.kind === 'intervals')!
+    expect(iv.steps?.[0].type).toBe('warmup')
+    expect(iv.steps?.at(-1)?.type).toBe('cooldown')
+    const block = iv.steps?.find((s) => s.type === 'repeat')
+    expect(block && block.type === 'repeat' && block.steps[0].pace).toBeGreaterThan(200)
+    expect(stepLines(iv.steps!)[1]).toMatch(/^\d+ × 1 km @ \d:\d\d\/km, 2 min Pause$/)
+  })
+  it('leaves easy runs as a single distance', () => {
+    expect(plan.find((w) => w.kind === 'easy')?.steps).toBeUndefined()
+  })
+  it('scales only the easy part when a run gets shorter', () => {
+    const long: PlanWorkout = { ...plan.find((w) => w.kind === 'long')!, steps: [{ type: 'run', m: 16000 }, { type: 'run', m: 4000, pace: 300 }] }
+    const s = scaleWorkout(long, 0.9)
+    expect(s.steps).toEqual([{ type: 'run', m: 14400 }, { type: 'run', m: 4000, pace: 300 }])
+    const iv = plan.find((w) => w.kind === 'intervals')!
+    expect(scaleWorkout(iv, 0.9).steps).toEqual(iv.steps)
+  })
+})
+
+describe('giveFeedback', () => {
+  const base = generatePlan(ev(), fit, '2026-09-20', id).map((w) => (w.date <= TODAY ? { ...w, status: 'done' as const } : w))
+  const done = base.filter((w) => w.status === 'done' && w.sport !== 'race')
+  it('only notes a single hard session', () => {
+    const r = giveFeedback(base, done.at(-1)!.id, 'hard', TODAY)
+    expect(r.changed).toHaveLength(1)
+    expect(r.changed[0].feedback).toBe('hard')
+  })
+  it('makes the next 7 days lighter after two hard sessions in a row', () => {
+    const all = base.map((w) => (w.id === done.at(-2)!.id ? { ...w, feedback: 'hard' as const } : w))
+    const r = giveFeedback(all, done.at(-1)!.id, 'hard', TODAY)
+    const next = all.filter((w) => w.date > TODAY && w.date <= addDays(TODAY, 7) && w.status === 'planned')
+    expect(r.changed).toHaveLength(1 + next.length)
+    const before = next.find((w) => w.distance_km)!
+    expect(r.changed.find((c) => c.id === before.id)!.distance_km).toBeCloseTo(before.distance_km! * 0.9, 0)
+    expect(r.message).toMatch(/10 % leichter/)
+  })
+  it('makes easy and long runs longer after two easy ratings', () => {
+    const all = base.map((w) => (w.id === done.at(-2)!.id ? { ...w, feedback: 'easy' as const } : w))
+    const r = giveFeedback(all, done.at(-1)!.id, 'easy', TODAY)
+    expect(r.changed.slice(1).every((c) => ['easy', 'long', 'recovery'].includes(c.kind))).toBe(true)
+    expect(r.changed.length).toBeGreaterThan(1)
+  })
+  it('does not adjust again on the third rating in a row', () => {
+    const ids = [done.at(-3)!.id, done.at(-2)!.id]
+    const all = base.map((w) => (ids.includes(w.id) ? { ...w, feedback: 'hard' as const } : w))
+    expect(giveFeedback(all, done.at(-1)!.id, 'hard', TODAY).changed).toHaveLength(1)
   })
 })
