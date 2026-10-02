@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoComplete, fillSteps, giveFeedback, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
+import { autoComplete, fillSteps, giveFeedback, legsProposal, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
 import { stepLines } from './labels'
 import { generatePlan, pacesFor, phasesFor, volumesFor } from './generate'
@@ -288,5 +288,23 @@ describe('giveFeedback', () => {
     const ids = [done.at(-3)!.id, done.at(-2)!.id]
     const all = base.map((w) => (ids.includes(w.id) ? { ...w, feedback: 'hard' as const } : w))
     expect(giveFeedback(all, done.at(-1)!.id, 'hard', TODAY).changed).toHaveLength(1)
+  })
+})
+
+describe('legsProposal', () => {
+  const plan = generatePlan(ev(), fit, TODAY, id)
+  const key = plan.find((w) => w.key_session && w.sport === 'run' && w.kind !== 'long')!
+  it('offers easy or move after hard leg training yesterday', () => {
+    const p = legsProposal(plan, key.date, { daysAgo: 1, hard: true })!
+    expect(p.workout.id).toBe(key.id)
+    expect(p.reason).toMatch(/Gestern Beine trainiert/)
+    expect(p.options[0].id).toBe('easy')
+    expect(p.options.some((o) => o.id === 'rest')).toBe(false)
+  })
+  it('ignores light leg training two days ago and days without a hard session', () => {
+    expect(legsProposal(plan, key.date, { daysAgo: 2, hard: false })).toBeNull()
+    expect(legsProposal(plan, key.date, null)).toBeNull()
+    const easyDay = plan.find((w) => !w.key_session)!
+    expect(legsProposal(plan, easyDay.date, { daysAgo: 1, hard: true })).toBeNull()
   })
 })

@@ -12,7 +12,7 @@ import { workoutAmount } from '../lib/plan/labels'
 import { useMemo } from 'react'
 import { readinessFor } from '../lib/readiness'
 import type { DailyLogState } from '../lib/useDailyLog'
-import { AlcoholCard, ProposalCard, ReadinessCard } from './TodayReadiness'
+import { AlcoholCard, GymCard, ProposalCard, ReadinessCard } from './TodayReadiness'
 import { FeedbackCard } from './PlanFeedback'
 
 function garminStatus(score: number): { status: Status; text: string } {
@@ -24,7 +24,7 @@ function garminStatus(score: number): { status: Status; text: string } {
 
 export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: Dataset; plan: PlanState; log: DailyLogState; onOpenActivity: (id: number) => void; onOpenPlan: () => void }) {
   const today = localToday()
-  const own = useMemo(() => readinessFor(today, data.days, data.activities, log.drinks), [today, data, log.drinks])
+  const own = useMemo(() => readinessFor(today, data.days, data.activities, log.drinks, log.gym), [today, data, log.drinks, log.gym])
   const day = data.days.at(-1)
   const lastNight = [...data.days].reverse().find((d) => d.sleep_s)
   const hrv = hrvState(day)
@@ -46,7 +46,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
   return (
     <div className="space-y-3">
       {own && <ReadinessCard r={own} garmin={readiness} />}
-      <ProposalCard plan={plan} r={own} today={today} />
+      <ProposalCard plan={plan} r={own} today={today} log={log} />
       <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
       <FeedbackCard plan={plan} today={today} activities={data.activities} />
       {!own && readiness != null && (
@@ -90,6 +90,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
       </div>
 
       <AlcoholCard log={log} today={today} />
+      <GymCard log={log} plan={plan} today={today} strengthToday={data.activities.some((a) => a.local_date === today && /strength|fitness_equipment/.test(a.sport))} />
 
       {sleepTotal > 0 && (
         <Card title="Schlafphasen" subtitle={lastNight && dateLabel(lastNight.date, { weekday: 'long', day: 'numeric', month: 'long' })}>
