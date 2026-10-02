@@ -72,3 +72,22 @@ describe('prognose', () => {
     expect(verdict(6000, 6400, 4).status).toBe('serious')
   })
 })
+
+describe('records', () => {
+  it('maps unknown Garmin record types to half and marathon via the linked run', async () => {
+    const { mergeBests } = await import('./records')
+    const runs = [
+      { id: 11, distance_m: 21150 },
+      { id: 12, distance_m: 42300 },
+    ]
+    const garmin = [
+      { type_id: 7, value: 42300, activity_id: 12, date: '2025-10-01' },
+      { type_id: 5, value: 6100, activity_id: 11, date: '2026-04-01' },
+      { type_id: 6, value: 13000, activity_id: 12, date: '2025-10-01' },
+      { type_id: 7, value: 42300, activity_id: 12, date: '2025-10-01' },
+    ]
+    const b = mergeBests(garmin, [], runs)
+    expect(b.find((x) => x.key === 'half')?.time_s).toBe(6100)
+    expect(b.find((x) => x.key === 'marathon')?.time_s).toBe(13000)
+  })
+})

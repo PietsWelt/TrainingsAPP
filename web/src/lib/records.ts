@@ -62,10 +62,27 @@ export function bestsFromActivities(activities: Pick<Activity, 'id' | 'sport' | 
   return out
 }
 
+/**
+ * Rekord-Typen ohne feste Zuordnung (z.B. Halbmarathon, Marathon) über den verknüpften Lauf
+ * erkennen: Liegt dessen Strecke im Fenster einer Distanz, gehört der Rekord dazu.
+ */
+export function typeByActivity(garmin: GarminRecord[], runs: Pick<Activity, 'id' | 'distance_m'>[]): Map<DistanceKey, GarminRecord> {
+  const known = new Set(DISTANCES.map((d) => d.typeId).filter((x) => x != null))
+  const out = new Map<DistanceKey, GarminRecord>()
+  for (const r of garmin) {
+    if (known.has(r.type_id) || r.activity_id == null) continue
+    const a = runs.find((x) => x.id === r.activity_id)
+    const d = a?.distance_m != null ? DISTANCES.find((x) => a.distance_m! >= x.meters * WINDOW[0] && a.distance_m! <= x.meters * WINDOW[1]) : undefined
+    if (d && !out.has(d.key) && r.value && plausible(r.value, d.meters)) out.set(d.key, r)
+  }
+  return out
+}
+
 /** Führt Garmin-Rekorde und Läufe zusammen; je Strecke gewinnt die schnellere Zeit. */
-export function mergeBests(garmin: GarminRecord[], fromRuns: Best[]): Best[] {
+export function mergeBests(garmin: GarminRecord[], fromRuns: Best[], runs: Pick<Activity, 'id' | 'distance_m'>[] = []): Best[] {
+  const byActivity = typeByActivity(garmin, runs)
   return DISTANCES.flatMap((d) => {
-    const g = d.typeId != null ? garmin.find((r) => r.type_id === d.typeId) : undefined
+    const g = d.typeId != null ? garmin.find((r) => r.type_id === d.typeId) : byActivity.get(d.key)
     const cands: Best[] = fromRuns.filter((b) => b.key === d.key)
     if (g?.value && plausible(g.value, d.meters))
       cands.push({ key: d.key, label: d.label, meters: d.meters, time_s: g.value, date: g.date, activity_id: g.activity_id })
