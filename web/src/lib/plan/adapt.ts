@@ -4,6 +4,7 @@
 import { sportGroup } from '../format'
 import type { Activity } from '../types'
 import { addDays, mondayOf, WEEKDAY_LONG, weekday } from './dates'
+import type { Readiness } from '../readiness'
 import type { PlanWorkout } from './types'
 
 export interface Change {
@@ -57,7 +58,7 @@ export function skipWorkout(all: PlanWorkout[], id: string, today: string): Chan
   return { changed, message }
 }
 
-function findSlot(plan: PlanWorkout[], w: PlanWorkout, today: string, raceDate?: string): string | null {
+export function findSlot(plan: PlanWorkout[], w: PlanWorkout, today: string, raceDate?: string): string | null {
   const monday = mondayOf(w.date)
   const isHard = (date: string) => plan.some((x) => x.id !== w.id && x.date === date && x.key_session && x.status !== 'skipped')
   const candidates: { date: string; free: boolean; dist: number }[] = []
@@ -118,4 +119,92 @@ export function progressOf(plan: PlanWorkout[], today: string): Progress {
     doneSoFar: due.filter((w) => w.status === 'done').length,
     daysToRace: race ? Math.round((Date.parse(race.date) - Date.parse(today)) / 86400_000) : null,
   }
+}
+
+// ---------- Anpassung an die Tagesform ----------
+
+export interface ReadinessOption {
+  id: 'easy' | 'move' | 'rest'
+  label: string
+  changed: PlanWorkout[]
+  message: string
+}
+
+export interface ReadinessProposal {
+  workout: PlanWorkout
+  reason: string
+  options: ReadinessOption[]
+}
+
+const snapshot = (w: PlanWorkout): NonNullable<PlanWorkout['original']> => ({
+  kind: w.kind,
+  title: w.title,
+  description: w.description,
+  duration_min: w.duration_min,
+  distance_km: w.distance_km,
+  key_session: w.key_session,
+  status: w.status,
+})
+
+/**
+ * Schlägt bei niedriger Readiness vor, die harte Einheit des Tages zu entschärfen:
+ * locker statt hart, auf einen späteren Tag der Woche verschieben oder (bei sehr niedrigem Wert) Ruhetag.
+ */
+export function readinessProposal(all: PlanWorkout[], today: string, r: Readiness | null): ReadinessProposal | null {
+  if (!r || (r.status !== 'serious' && r.status !== 'critical')) return null
+  const w = all.find((x) => x.date === today && x.status === 'planned' && x.key_session && x.sport !== 'race' && !x.original)
+  if (!w) return null
+
+  const plan = all.filter((x) => x.event_id === w.event_id)
+  const raceDate = plan.find((x) => x.sport === 'race')?.date
+  const options: ReadinessOption[] = []
+
+  const mins = Math.max(20, Math.round(((w.duration_min ?? 45) * 0.6) / 5) * 5)
+  const easy: PlanWorkout = {
+    ...w,
+    kind: 'easy',
+    title: w.sport === 'run' ? 'Lockerer Lauf (angepasst)' : `${w.title.split(':')[0]}: locker (angepasst)`,
+    description: `Angepasst wegen niedriger Readiness (${r.score}). Ganz locker im Gesprächstempo, Zone 1–2. Ursprünglich: ${w.title}.`,
+    duration_min: mins,
+    distance_km: w.distance_km != null ? Math.round(w.distance_km * 0.6 * 10) / 10 : null,
+    key_session: false,
+    original: snapshot(w),
+  }
+  options.push({ id: 'easy', label: 'Locker statt hart', changed: [easy], message: `${w.title} heute durch ${mins} min locker ersetzt.` })
+
+  if (w.phase !== 'taper') {
+    const slot = findSlot(plan, w, today, raceDate)
+    if (slot) {
+      const replaced = plan.find((x) => x.date === slot && x.id !== w.id && x.status === 'planned')
+      const changed: PlanWorkout[] = [{ ...w, date: slot, moved_from: w.moved_from ?? w.date }]
+      if (replaced) changed.push({ ...replaced, status: 'skipped' })
+      options.push({
+        id: 'move',
+        label: `Auf ${WEEKDAY_LONG[weekday(slot)]} verschieben`,
+        changed,
+        message: `${w.title} auf ${WEEKDAY_LONG[weekday(slot)]} verschoben. Heute frei oder ganz locker.`,
+      })
+    }
+  }
+
+  if (r.status === 'critical') {
+    options.push({
+      id: 'rest',
+      label: 'Ruhetag',
+      changed: [{ ...w, status: 'skipped', original: snapshot(w) }],
+      message: 'Heute Ruhetag. Erholung bringt dich gerade weiter als Training.',
+    })
+  }
+
+  return {
+    workout: w,
+    reason: `Deine Readiness ist heute niedrig (${r.score}). Wie willst du die Einheit angehen?`,
+    options: r.status === 'critical' ? [...options].sort((a) => (a.id === 'rest' ? -1 : 0)) : options,
+  }
+}
+
+/** Stellt eine wegen Readiness angepasste Einheit wieder her. */
+export function restoreOriginal(w: PlanWorkout): PlanWorkout {
+  if (!w.original) return w
+  return { ...w, ...w.original, original: null }
 }

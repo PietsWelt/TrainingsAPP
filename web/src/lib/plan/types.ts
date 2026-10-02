@@ -59,6 +59,8 @@ export interface PlanWorkout {
   status: WorkoutStatus
   activity_id: number | null
   moved_from: string | null
+  /** Ursprüngliche Werte, falls die Einheit wegen niedriger Readiness angepasst wurde. */
+  original?: Pick<PlanWorkout, 'kind' | 'title' | 'description' | 'duration_min' | 'distance_km' | 'key_session' | 'status'> | null
 }
 
 /** Aktueller Trainingsstand, abgeleitet aus den letzten 6 Wochen Garmin-Daten. */

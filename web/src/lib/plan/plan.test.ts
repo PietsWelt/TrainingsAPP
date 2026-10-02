@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { autoComplete, progressOf, skipWorkout } from './adapt'
+import { autoComplete, progressOf, readinessProposal, restoreOriginal, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
 import { generatePlan, pacesFor, phasesFor, volumesFor } from './generate'
+import type { Readiness } from '../readiness'
 import type { Fitness, PlanWorkout, RaceEvent } from './types'
 
 let n = 0
@@ -180,5 +181,47 @@ describe('autoComplete and progress', () => {
     expect(p.done).toBe(1)
     expect(p.dueSoFar).toBe(1)
     expect(p.daysToRace).toBe(8)
+  })
+})
+
+describe('readinessProposal', () => {
+  const low = (score: number, status: Readiness['status']): Readiness => ({ date: TODAY, score, status, headline: '', advice: 'Heute lieber locker.', components: [] })
+  const plan = (): PlanWorkout[] => generatePlan(ev(), fit, addDays(TODAY, -7), id)
+
+  it('does nothing when readiness is fine or no hard session is planned', () => {
+    const p = plan()
+    expect(readinessProposal(p, TODAY, low(80, 'good'))).toBeNull()
+    const easyDay = p.find((w) => !w.key_session && w.date > TODAY)!.date
+    expect(readinessProposal(p, easyDay, low(40, 'serious'))).toBeNull()
+  })
+
+  it('offers an easy version that can be undone', () => {
+    const p = plan()
+    const hardDay = p.find((w) => w.key_session && w.kind !== 'long' && w.sport !== 'race' && w.phase !== 'taper')!.date
+    const prop = readinessProposal(p, hardDay, low(42, 'serious'))!
+    const easy = prop.options.find((o) => o.id === 'easy')!.changed[0]
+    expect(easy.key_session).toBe(false)
+    expect(easy.duration_min!).toBeLessThan(prop.workout.duration_min!)
+    expect(easy.original?.title).toBe(prop.workout.title)
+    const back = restoreOriginal(easy)
+    expect(back.title).toBe(prop.workout.title)
+    expect(back.original).toBeNull()
+    expect(prop.options.some((o) => o.id === 'rest')).toBe(false)
+  })
+
+  it('suggests a rest day first when readiness is critical', () => {
+    const p = plan()
+    const hardDay = p.find((w) => w.key_session && w.sport !== 'race' && w.phase !== 'taper')!.date
+    const prop = readinessProposal(p, hardDay, low(25, 'critical'))!
+    expect(prop.options[0].id).toBe('rest')
+  })
+
+  it('does not propose again once the session was adjusted', () => {
+    const p = plan()
+    const hardDay = p.find((w) => w.key_session && w.sport !== 'race' && w.phase !== 'taper')!.date
+    const prop = readinessProposal(p, hardDay, low(42, 'serious'))!
+    const changed = prop.options[0].changed[0]
+    const after = p.map((w) => (w.id === changed.id ? changed : w))
+    expect(readinessProposal(after, hardDay, low(42, 'serious'))).toBeNull()
   })
 })

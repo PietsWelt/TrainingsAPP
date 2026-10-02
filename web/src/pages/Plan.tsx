@@ -4,7 +4,7 @@ import { toast } from '../lib/toast'
 import { Card } from '../components/ui'
 import { dateLabel } from '../lib/format'
 import { tap } from '../lib/haptics'
-import { progressOf } from '../lib/plan/adapt'
+import { progressOf, restoreOriginal } from '../lib/plan/adapt'
 import { addDays, daysBetween, localToday, mondayOf, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from '../lib/plan/dates'
 import { fmtDuration, fmtPace, raceDistanceKm } from '../lib/plan/generate'
 import type { PlanState } from '../lib/plan/usePlan'
@@ -101,6 +101,11 @@ export function Plan({ plan }: { plan: PlanState }) {
           }}
           onSkip={async () => {
             toast(await plan.skip(opened))
+            setOpenId(null)
+          }}
+          onRestore={async () => {
+            await plan.applyChanges([restoreOriginal(opened)])
+            toast('Ursprüngliche Einheit wiederhergestellt.')
             setOpenId(null)
           }}
         />
@@ -253,12 +258,13 @@ function CheckButton({ w, onToggle }: { w: PlanWorkout; onToggle: (w: PlanWorkou
   )
 }
 
-function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip }: {
+function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip, onRestore }: {
   workout: PlanWorkout
   today: string
   onClose: () => void
   onStatus: (s: PlanWorkout['status']) => Promise<void>
   onSkip: () => Promise<void>
+  onRestore: () => Promise<void>
 }) {
   const [busy, setBusy] = useState(false)
   const run = (f: () => Promise<void>) => async () => {
@@ -274,7 +280,18 @@ function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip }: {
       title="Einheit"
       onClose={onClose}
       footer={
-        w.sport === 'race' ? undefined : w.status === 'planned' ? (
+        w.sport === 'race' ? undefined : w.original ? (
+          <div className={w.status === 'planned' ? 'grid grid-cols-2 gap-2' : ''}>
+            <button disabled={busy} onClick={run(onRestore)} className="min-h-12 w-full rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
+              Original zurück
+            </button>
+            {w.status === 'planned' && (
+              <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl bg-accent text-[15px] font-semibold text-white disabled:opacity-60">
+                Erledigt
+              </button>
+            )}
+          </div>
+        ) : w.status === 'planned' ? (
           <div className="grid grid-cols-2 gap-2">
             <button disabled={busy} onClick={run(onSkip)} className="min-h-12 rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
               {w.date >= today ? 'Überspringen' : 'Ausgelassen'}
@@ -297,13 +314,14 @@ function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip }: {
         <h1 className="mt-1 text-2xl font-semibold">{SPORT_ICON[w.sport]} {w.title}</h1>
         <div className="mt-1 text-sm text-ink-2">{workoutAmount(w)}</div>
         {w.moved_from && <div className="mt-1 text-xs text-ink-3">Verschoben von {WEEKDAY_LONG[weekday(w.moved_from)]}</div>}
+        {w.original && <div className="mt-1 text-xs text-ink-3">An deine Readiness angepasst, ursprünglich: {w.original.title}</div>}
       </div>
       {w.description && (
         <Card>
           <p className="text-sm leading-relaxed whitespace-pre-line text-ink-2">{w.description}</p>
         </Card>
       )}
-      {w.sport !== 'race' && w.status === 'planned' && (
+      {w.sport !== 'race' && w.status === 'planned' && !w.original && (
         <p className="text-xs text-ink-3">Wichtige Einheiten verschiebe ich beim Überspringen nach Möglichkeit auf einen freien Tag derselben Woche. Läufe mit der Uhr werden nach dem Sync automatisch abgehakt.</p>
       )}
     </Sheet>

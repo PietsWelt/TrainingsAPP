@@ -22,6 +22,14 @@ function check<T>(r: { data: T | null; error: { message: string } | null }): T {
   return r.data as T
 }
 
+let originalColumn = true
+// Felder, die es in der Datenbank (noch) nicht gibt, nicht mitschicken.
+function strip<T extends { original?: unknown }>(w: T): T {
+  if (originalColumn) return w
+  const { original: _ignored, ...rest } = w
+  return rest as T
+}
+
 const supabaseStore = (): PlanStore => {
   const db = supabase!
   return {
@@ -35,16 +43,22 @@ const supabaseStore = (): PlanStore => {
       check(await db.from('events').delete().eq('id', id))
     },
     async listWorkouts() {
-      return check(await db.from('plan_workouts').select(WORKOUT_COLS).order('date')) as PlanWorkout[]
+      const r = await db.from('plan_workouts').select(`${WORKOUT_COLS},original`).order('date')
+      // Ohne Migration 0003 fehlt die Spalte; der Plan funktioniert dann ohne Rückgängig-Funktion.
+      if (r.error && /original/.test(r.error.message)) {
+        originalColumn = false
+        return check(await db.from('plan_workouts').select(WORKOUT_COLS).order('date')) as PlanWorkout[]
+      }
+      return check(r) as PlanWorkout[]
     },
     async replaceFrom(eventId, from, workouts) {
       check(await db.from('plan_workouts').delete().eq('event_id', eventId).gte('date', from))
-      for (let i = 0; i < workouts.length; i += 200) check(await db.from('plan_workouts').insert(workouts.slice(i, i + 200)))
+      for (let i = 0; i < workouts.length; i += 200) check(await db.from('plan_workouts').insert(workouts.slice(i, i + 200).map(strip)))
     },
     async updateWorkouts(ws) {
       if (!ws.length) return
       const now = new Date().toISOString()
-      check(await db.from('plan_workouts').upsert(ws.map((w) => ({ ...w, updated_at: now }))))
+      check(await db.from('plan_workouts').upsert(ws.map((w) => strip({ ...w, updated_at: now }))))
     },
   }
 }
