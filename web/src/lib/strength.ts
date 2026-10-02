@@ -355,7 +355,7 @@ export const STRENGTH_EVIDENCE: { title: string; text: string; source: string }[
   {
     title: 'Einmal pro Woche reicht zum Erhalten',
     text: 'Zum Aufbau sind zwei Einheiten pro Woche besser, eine Einheit hält aufgebaute Kraft aber über Monate. Mit der Laufbelastung zusammen ist eine Bein-Einheit pro Woche ein guter Kompromiss.',
-    source: 'Rønnestad et al. 2011, Scand J Med Sci Sports',
+    source: 'Rønnestad et al. 2010, Eur J Appl Physiol',
   },
   {
     title: 'Wann in der Woche',
