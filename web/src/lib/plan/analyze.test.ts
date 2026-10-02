@@ -19,14 +19,17 @@ function act(zones: number[], over: Partial<Activity> = {}): Activity {
 }
 
 describe('analyzeRun', () => {
-  it('calls a zone 2 run with a high heart rate too hard and slows the next easy runs', () => {
-    const a = analyzeRun(easy, act([0.05, 0.45, 0.4, 0.1, 0]))!
+  it('calls an easy run with a lot of zone 4 too hard and slows the next easy runs', () => {
+    const a = analyzeRun(easy, act([0.05, 0.35, 0.35, 0.25, 0]))!
     expect(a.verdict).toBe('hard')
     expect(a.paceShift).toBe(10)
-    expect(a.reasons[0]).toMatch(/50 % der Zeit über Zone 2/)
+    expect(a.reasons[0]).toMatch(/25 % der Zeit in Zone 4 oder höher/)
   })
-  it('accepts a proper zone 2 run', () => {
-    expect(analyzeRun(easy, act([0.1, 0.8, 0.1, 0, 0]))!.verdict).toBe('ok')
+  it('accepts an easy run between zone 2 and 3', () => {
+    expect(analyzeRun(easy, act([0.05, 0.45, 0.45, 0.05, 0]))!.verdict).toBe('ok')
+  })
+  it('ignores implausible zones, like hours in zone 5', () => {
+    expect(analyzeRun(easy, act([0, 0.1, 0.1, 0.2, 0.6]))).toBeNull()
   })
   it('calls a run almost entirely in zone 1 too easy and speeds the easy pace up a little', () => {
     const a = analyzeRun(easy, act([0.8, 0.18, 0.02, 0, 0]))!
@@ -35,6 +38,8 @@ describe('analyzeRun', () => {
   it('uses the effort rating from the watch for hard sessions', () => {
     expect(analyzeRun(tempo, act([0, 0.2, 0.3, 0.4, 0.1], { rpe: 90 }))!.verdict).toBe('hard')
     expect(analyzeRun(tempo, act([0, 0.2, 0.3, 0.4, 0.1], { rpe: 60 }))!.verdict).toBe('ok')
+    // Ohne Anstrengung zählt auch viel „Zone 5“ nicht als zu hart.
+    expect(analyzeRun(tempo, act([0, 0, 0.1, 0.2, 0.7], { aerobic_te: 4.5 }))!.verdict).toBe('ok')
   })
   it('gives up without heart rate data', () => {
     expect(analyzeRun(easy, act([], { hr_zones_s: null }))).toBeNull()

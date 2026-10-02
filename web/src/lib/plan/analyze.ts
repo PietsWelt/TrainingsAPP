@@ -20,38 +20,53 @@ const EASY_KINDS: Kind[] = ['easy', 'long', 'recovery', 'strides']
 const QUALITY_KINDS: Kind[] = ['fartlek', 'tempo', 'intervals', 'race_pace']
 const pct = (x: number) => `${Math.round(x * 100)} %`
 
+/**
+ * Garmin-Zonen sind nicht immer verlässlich (z.B. stundenlang „Zone 5“ im Marathon).
+ * Mehr als 40 % in Zone 5 bei über 40 min Laufzeit gilt als Messfehler: dann zählen die Zonen nicht.
+ */
+export function zonesPlausible(a: Activity): boolean {
+  const z = (a.hr_zones_s ?? []).map((x) => x ?? 0)
+  const total = z.reduce((s, x) => s + x, 0)
+  if (!total) return false
+  return !(total > 40 * 60 && (z[4] ?? 0) / total > 0.4)
+}
+
 export function analyzeRun(w: PlanWorkout, a: Activity): Analysis | null {
   if (w.sport !== 'run') return null
   const z = (a.hr_zones_s ?? []).map((x) => x ?? 0)
   const total = z.reduce((s, x) => s + x, 0)
   const share = (from: number, to = 5) => (total ? z.slice(from - 1, to).reduce((s, x) => s + x, 0) / total : 0)
+  const zonesOk = zonesPlausible(a)
   const rpe = a.rpe != null ? a.rpe / 10 : null
 
   if (EASY_KINDS.includes(w.kind)) {
-    if (!total) return null
-    const above = share(3)
+    // Zone 2–3 ist für lockere Läufe in Ordnung; zu hart ist erst Zeit ab Zone 4.
+    if (!zonesOk) return null
+    const above = share(4)
     const z1 = share(1, 1)
-    const limit = w.kind === 'recovery' ? 0.15 : w.kind === 'easy' ? 0.25 : 0.3
-    if (above > limit || (w.kind !== 'long' && (a.aerobic_te ?? 0) >= 4)) {
-      const reasons = [`${pct(above)} der Zeit über Zone 2 (Ziel: höchstens ${pct(limit)}).`]
-      if ((a.aerobic_te ?? 0) >= 4) reasons.push(`Aerober Trainingseffekt ${a.aerobic_te?.toFixed(1)}, für einen lockeren Lauf zu hoch.`)
-      return { verdict: 'hard', reasons, paceShift: w.kind === 'recovery' ? 0 : above > 0.5 ? 15 : 10, group: 'easy' }
+    const limit = w.kind === 'recovery' ? 0.1 : w.kind === 'long' ? 0.2 : 0.15
+    if (above > limit || (w.kind !== 'long' && (a.aerobic_te ?? 0) >= 4.2)) {
+      const reasons = [`${pct(above)} der Zeit in Zone 4 oder höher (Ziel: höchstens ${pct(limit)}).`]
+      if ((a.aerobic_te ?? 0) >= 4.2) reasons.push(`Aerober Trainingseffekt ${a.aerobic_te?.toFixed(1)}, für einen lockeren Lauf zu hoch.`)
+      return { verdict: 'hard', reasons, paceShift: w.kind === 'recovery' ? 0 : above > 0.35 ? 15 : 10, group: 'easy' }
     }
-    if (w.kind !== 'recovery' && z1 > 0.6 && above < 0.05) {
+    if (w.kind !== 'recovery' && z1 > 0.6 && share(3) < 0.05) {
       return { verdict: 'easy', reasons: [`${pct(z1)} der Zeit in Zone 1, der Puls war kaum in Zone 2.`], paceShift: -5, group: 'easy' }
     }
-    return { verdict: 'ok', reasons: [`${pct(1 - above - z1)} in Zone 2, nur ${pct(above)} darüber. Genau richtig.`], paceShift: 0, group: 'easy' }
+    return { verdict: 'ok', reasons: [`${pct(share(2, 3))} in Zone 2–3, nur ${pct(above)} darüber. Passt.`], paceShift: 0, group: 'easy' }
   }
 
   if (QUALITY_KINDS.includes(w.kind)) {
+    // Bei harten Einheiten sind die Zonen oft falsch: entscheidend ist deine Anstrengung,
+    // ohne sie nur ein sehr deutlicher Trainingseffekt.
+    const te = a.aerobic_te
+    if (rpe == null && te == null) return null
     const reasons: string[] = []
-    const z5 = share(5, 5)
-    const hard = (rpe != null && rpe >= 9) || (w.kind === 'tempo' && z5 > 0.35) || (a.aerobic_te ?? 0) >= 4.8
-    const easy = (rpe != null && rpe <= 4) || (a.aerobic_te != null && a.aerobic_te < 2.5 && (a.anaerobic_te ?? 0) < 1.5)
-    if (rpe == null && a.aerobic_te == null && !total) return null
     if (rpe != null) reasons.push(`Deine Anstrengung auf der Uhr: ${rpe.toFixed(0)}/10.`)
-    if (a.aerobic_te != null) reasons.push(`Trainingseffekt aerob ${a.aerobic_te.toFixed(1)}, anaerob ${(a.anaerobic_te ?? 0).toFixed(1)}.`)
-    if (w.kind === 'tempo' && total) reasons.push(`${pct(z5)} der Zeit in Zone 5${z5 > 0.35 ? ', für einen Schwellenlauf zu viel' : ''}.`)
+    if (te != null) reasons.push(`Trainingseffekt aerob ${te.toFixed(1)}, anaerob ${(a.anaerobic_te ?? 0).toFixed(1)}.`)
+    if (rpe == null) reasons.push('Gib nach dem Lauf auf der Uhr deine Anstrengung ein, dann wird die Bewertung genauer.')
+    const hard = rpe != null ? rpe >= 9 : (te ?? 0) >= 5
+    const easy = rpe != null ? rpe <= 4 : te != null && te < 2 && (a.anaerobic_te ?? 0) < 1
     if (hard) return { verdict: 'hard', reasons, paceShift: 4, group: 'quality' }
     if (easy) return { verdict: 'easy', reasons: [...reasons, 'Der Reiz war eher gering.'], paceShift: -3, group: 'quality' }
     return { verdict: 'ok', reasons, paceShift: 0, group: 'quality' }
