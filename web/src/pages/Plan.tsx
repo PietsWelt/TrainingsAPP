@@ -11,6 +11,7 @@ import type { PlanState } from '../lib/plan/usePlan'
 import { stepLines, workoutAmount } from '../lib/plan/labels'
 import { AnalysisBlock, FeedbackChips } from './PlanFeedback'
 import { analysisFor } from '../lib/plan/analyze'
+import { explain } from '../lib/plan/explain'
 import type { Activity, RacePrediction } from '../lib/types'
 import type { Best } from '../lib/records'
 import { RaceCheck } from './PlanInsights'
@@ -360,6 +361,7 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
           <p className="text-sm leading-relaxed whitespace-pre-line text-ink-2">{w.description}</p>
         </Card>
       )}
+      <WhyCard w={w} />
       {w.steps && w.steps.length > 1 && (
         <Card title="Ablauf auf der Uhr">
           <ol className="space-y-1.5 text-sm">
@@ -567,5 +569,35 @@ function EventForm({ event, onClose, onSave, onDelete }: {
           </button>
         ))}
     </Sheet>
+  )
+}
+
+/** Wofür die Einheit da ist und was die Forschung dazu sagt. */
+function WhyCard({ w }: { w: PlanWorkout }) {
+  const e = explain(w)
+  if (!e) return null
+  return (
+    <Card title="Warum diese Einheit?" subtitle={e.short}>
+      <dl className="space-y-3 text-sm">
+        <div>
+          <dt className="text-xs font-semibold text-ink-3 uppercase">Wofür</dt>
+          <dd className="mt-0.5 leading-relaxed text-ink-2">{e.purpose}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold text-ink-3 uppercase">Was im Körper passiert</dt>
+          <dd className="mt-0.5 leading-relaxed text-ink-2">{e.effect}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold text-ink-3 uppercase">Was Studien zeigen</dt>
+          <dd className="mt-0.5 leading-relaxed text-ink-2">{e.evidence}</dd>
+        </div>
+        <div className="rounded-2xl bg-surface-2 p-3">
+          <dt className="text-xs font-semibold text-accent uppercase">Tipp</dt>
+          <dd className="mt-0.5 leading-relaxed">{e.tip}</dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-xs text-ink-3">{e.phase}</p>
+      <p className="mt-1 text-[11px] text-ink-3">Quellen: {e.sources.join(' · ')}</p>
+    </Card>
   )
 }
