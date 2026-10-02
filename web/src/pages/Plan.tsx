@@ -7,6 +7,8 @@ import { guessType, handledIds, markHandled, openSuggestions, type GarminRace } 
 import { tap } from '../lib/haptics'
 import { FEEDBACK_LABEL, progressOf, restoreOriginal } from '../lib/plan/adapt'
 import { addDays, daysBetween, localToday, mondayOf, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from '../lib/plan/dates'
+import type { GymByDate } from '../lib/dailyLog'
+import { WeekStrengthLine } from './Strength'
 import { fmtDuration, fmtPace, raceDistanceKm } from '../lib/plan/generate'
 import type { PlanState } from '../lib/plan/usePlan'
 import { stepLines, workoutAmount } from '../lib/plan/labels'
@@ -20,7 +22,7 @@ import { RaceCheck } from './PlanInsights'
 import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
 
-export function Plan({ plan, activities, records, predictions, garminRaces }: { plan: PlanState; activities?: Activity[]; records?: Best[]; predictions?: RacePrediction[]; garminRaces?: GarminRace[] }) {
+export function Plan({ plan, gym, activities, records, predictions, garminRaces }: { plan: PlanState; gym?: GymByDate; activities?: Activity[]; records?: Best[]; predictions?: RacePrediction[]; garminRaces?: GarminRace[] }) {
   const today = localToday()
   const upcoming = plan.events.filter((e) => e.date >= today)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -102,7 +104,7 @@ export function Plan({ plan, activities, records, predictions, garminRaces }: { 
         <>
           <EventHeader event={selected} workouts={workouts} today={today} onEdit={() => setEditing(selected)} />
           <RaceCheck event={selected} workouts={workouts} activities={activities ?? []} records={records ?? []} predictions={predictions} today={today} />
-          <WeekList activities={activities} workouts={workouts} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
+          <WeekList activities={activities} workouts={workouts} all={plan.workouts} gym={gym ?? {}} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
         </>
       )}
 
@@ -212,7 +214,7 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
   )
 }
 
-function WeekList({ workouts, today, activities, onOpen, onToggle }: { workouts: PlanWorkout[]; today: string; activities?: Activity[]; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
+function WeekList({ workouts, all, gym, today, activities, onOpen, onToggle }: { workouts: PlanWorkout[]; all: PlanWorkout[]; gym: GymByDate; today: string; activities?: Activity[]; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
   const [showPast, setShowPast] = useState(false)
   const weeks = useMemo(() => {
     const m = new Map<string, PlanWorkout[]>()
@@ -234,13 +236,13 @@ function WeekList({ workouts, today, activities, onOpen, onToggle }: { workouts:
         </button>
       )}
       {(showPast ? weeks : rest).map(([monday, ws]) => (
-        <Week key={monday} monday={monday} workouts={ws} today={today} activities={activities} onOpen={onOpen} onToggle={onToggle} />
+        <Week key={monday} monday={monday} workouts={ws} all={all} gym={gym} today={today} activities={activities} onOpen={onOpen} onToggle={onToggle} />
       ))}
     </div>
   )
 }
 
-function Week({ monday, workouts, today, activities, onOpen, onToggle }: { monday: string; workouts: PlanWorkout[]; today: string; activities?: Activity[]; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
+function Week({ monday, workouts, all, gym, today, activities, onOpen, onToggle }: { monday: string; workouts: PlanWorkout[]; all: PlanWorkout[]; gym: GymByDate; today: string; activities?: Activity[]; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
   const first = workouts[0]
   const runKm = workouts.filter((w) => w.sport === 'run').reduce((a, w) => a + (w.distance_km ?? 0), 0)
   const mins = workouts.filter((w) => w.sport !== 'race').reduce((a, w) => a + (w.duration_min ?? 0), 0)
@@ -283,6 +285,7 @@ function Week({ monday, workouts, today, activities, onOpen, onToggle }: { monda
           </li>
         ))}
       </ul>
+      <WeekStrengthLine monday={monday} workouts={all} gym={gym} today={today} />
     </Card>
   )
 }
