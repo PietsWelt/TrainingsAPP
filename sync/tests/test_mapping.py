@@ -66,3 +66,10 @@ def test_base_url_accepts_rest_url():
     assert base_url("https://x.supabase.co/rest/v1/") == "https://x.supabase.co"
     assert base_url("https://x.supabase.co/") == "https://x.supabase.co"
     assert base_url(" https://x.supabase.co ") == "https://x.supabase.co"
+
+
+def test_auth_header_only_for_jwt_keys():
+    from db import Supabase
+
+    assert "Authorization" not in Supabase("https://x.supabase.co", "sb_secret_abc").session.headers
+    assert Supabase("https://x.supabase.co", "eyJabc").session.headers["Authorization"] == "Bearer eyJabc"

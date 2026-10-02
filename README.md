@@ -30,7 +30,7 @@ Garmin Connect ──(python-garminconnect, alle 30 min + Knopf)──► GitHub
 ### 2. GitHub-Einstellungen im Repo
 **Settings → Secrets and variables → Actions**
 
-- Tab **Secrets**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (geheim, nie in die App!)
+- Tab **Secrets**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` = der „secret“-Key (`sb_secret_…`) oder der Legacy-`service_role`-Key (geheim, nie in die App!)
 - Tab **Variables**: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (für die App)
 
 **Settings → Pages → Source: GitHub Actions**
