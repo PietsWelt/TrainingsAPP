@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { SkeletonPage } from './components/Skeleton'
 import { Toaster } from './components/Toast'
 import { toast } from './lib/toast'
@@ -73,7 +73,8 @@ function Main() {
     setTab(t)
   }
 
-  useSwipeTabs(TABS, tab, (t) => {
+  const mainRef = useRef<HTMLElement>(null)
+  useSwipeTabs(mainRef, TABS, tab, (t) => {
     tap()
     selectTab(t)
   })
@@ -103,7 +104,7 @@ function Main() {
   const opened = openId != null ? data?.activities.find((a) => a.id === openId) : undefined
 
   return (
-    <div className="mx-auto min-h-dvh max-w-xl">
+    <div className="mx-auto min-h-dvh max-w-xl overflow-x-clip">
       <header className="sticky top-0 z-10 bg-bg/85 px-5 pb-3 backdrop-blur-xl" style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -118,7 +119,7 @@ function Main() {
         {tab === 'today' && <p className="mt-0.5 text-xs text-ink-3"><SyncStatus data={data} /></p>}
       </header>
 
-      <main className="px-4 pt-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 100px)' }}>
+      <main ref={mainRef} className="px-4 pt-1 will-change-transform" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 100px)' }}>
         <PullIndicator pull={ptr.pull} ready={ptr.ready} busy={ptr.busy} />
         {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
         {!data && !error && <SkeletonPage />}
