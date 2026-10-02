@@ -21,7 +21,7 @@ export function Trends({ data }: { data: Dataset }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-center">
+      <div>
         <Segmented
           value={range}
           onChange={setRange}

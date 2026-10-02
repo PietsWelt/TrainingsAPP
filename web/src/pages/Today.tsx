@@ -5,6 +5,9 @@ import { dateLabel, duration, hoursMin, km, speed, sportGroup, sportLabel } from
 import type { Dataset } from '../lib/types'
 import { localToday } from '../lib/plan/dates'
 import type { PlanState } from '../lib/plan/usePlan'
+import type { PlanWorkout } from '../lib/plan/types'
+import { tap } from '../lib/haptics'
+import { toast } from '../lib/toast'
 import { workoutAmount } from '../lib/plan/labels'
 
 function readinessStatus(score: number): { status: Status; text: string } {
@@ -108,7 +111,7 @@ export function Today({ data, plan, onOpenActivity, onOpenPlan }: { data: Datase
       )}
 
       {latest && (
-        <button className="block w-full text-left" onClick={() => onOpenActivity(latest.id)}>
+        <button className="block w-full rounded-2xl text-left" onClick={() => onOpenActivity(latest.id)}>
           <Card title="Letzte Einheit" subtitle={`${sportLabel(latest.sport)} · ${dateLabel(latest.start_time, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`}>
             <div className="mb-3 text-lg font-semibold">{latest.name}</div>
             <div className="grid grid-cols-3 gap-2">
@@ -166,32 +169,48 @@ function PlannedToday({ plan, onOpenPlan }: { plan: PlanState; onOpenPlan: () =>
   const ws = plan.workouts.filter((w) => w.date === today && w.status !== 'skipped')
   if (!plan.events.some((e) => e.date >= today)) return null
   const race = (id: string) => plan.events.find((e) => e.id === id)?.name
+  async function toggle(w: PlanWorkout) {
+    const done = w.status !== 'done'
+    tap()
+    try {
+      await plan.setStatus(w, done ? 'done' : 'planned')
+      if (done) toast(`${w.title} erledigt. Stark!`)
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
   return (
-    <button onClick={onOpenPlan} className="block w-full text-left">
-      <Card title="Heute geplant">
-        {ws.length === 0 ? (
-          <p className="text-sm text-ink-2">Ruhetag. Erholung gehört zum Plan.</p>
-        ) : (
-          <ul className="space-y-2">
-            {ws.map((w) => (
-              <li key={w.id} className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className={`truncate text-[15px] font-semibold ${w.status === 'done' ? 'text-ink-3' : ''}`}>{w.title}</div>
-                  <div className="text-xs text-ink-3">
-                    {workoutAmount(w)}
-                    {plan.events.length > 1 && ` · ${race(w.event_id)}`}
-                  </div>
-                </div>
-                {w.status === 'done' ? (
-                  <span className="text-xs font-medium" style={{ color: 'var(--good)' }}>✓ Erledigt</span>
-                ) : (
-                  <span className="text-accent">›</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    </button>
+    <Card title="Heute geplant">
+      {ws.length === 0 ? (
+        <button onClick={onOpenPlan} className="press-row -mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between rounded-lg px-2 text-left text-sm text-ink-2">
+          Ruhetag. Erholung gehört zum Plan.
+          <span className="text-accent">Plan ›</span>
+        </button>
+      ) : (
+        <ul className="-my-1">
+          {ws.map((w) => (
+            <li key={w.id} className="flex items-center">
+              <button onClick={onOpenPlan} className="press-row -ml-2 flex min-h-14 min-w-0 flex-1 flex-col justify-center rounded-lg pl-2 text-left">
+                <span className={`truncate text-[17px] font-semibold ${w.status === 'done' ? 'text-ink-3 line-through' : ''}`}>{w.title}</span>
+                <span className="text-xs text-ink-3">
+                  {workoutAmount(w)}
+                  {plan.events.length > 1 && ` · ${race(w.event_id)}`}
+                </span>
+              </button>
+              {w.sport !== 'race' && (
+                <button
+                  onClick={() => toggle(w)}
+                  aria-pressed={w.status === 'done'}
+                  className={`ml-2 min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold ${w.status === 'done' ? 'text-white' : 'bg-surface-2 text-ink'}`}
+                  style={w.status === 'done' ? { background: 'var(--good)' } : undefined}
+                >
+                  {w.status === 'done' ? '✓ Erledigt' : 'Erledigt?'}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   )
 }

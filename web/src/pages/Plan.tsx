@@ -1,6 +1,9 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
+import { Sheet } from '../components/Sheet'
+import { toast } from '../lib/toast'
 import { Card } from '../components/ui'
 import { dateLabel } from '../lib/format'
+import { tap } from '../lib/haptics'
 import { progressOf } from '../lib/plan/adapt'
 import { addDays, daysBetween, localToday, mondayOf, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from '../lib/plan/dates'
 import { fmtDuration, fmtPace, raceDistanceKm } from '../lib/plan/generate'
@@ -16,11 +19,21 @@ export function Plan({ plan }: { plan: PlanState }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<RaceEvent | 'new' | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
 
   const selected = plan.events.find((e) => e.id === selectedId) ?? upcoming[0] ?? plan.events.at(-1)
   const workouts = useMemo(() => plan.workouts.filter((w) => w.event_id === selected?.id), [plan.workouts, selected?.id])
   const opened = workouts.find((w) => w.id === openId)
+
+  async function toggleDone(w: PlanWorkout) {
+    const done = w.status !== 'done'
+    tap()
+    try {
+      await plan.setStatus(w, done ? 'done' : 'planned')
+      if (done) toast(`${w.title} erledigt. Stark!`)
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
 
   if (plan.loading) return <div className="p-10 text-center text-sm text-ink-3">Lade Plan …</div>
 
@@ -34,24 +47,16 @@ export function Plan({ plan }: { plan: PlanState }) {
             key={e.id}
             onClick={() => {
               setSelectedId(e.id)
-              setNotice(null)
             }}
-            className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium ${e.id === selected?.id ? 'border-accent bg-accent text-white' : 'border-line bg-surface text-ink-2'} ${e.date < today ? 'opacity-60' : ''}`}
+            className={`min-h-9 shrink-0 rounded-full border px-3.5 text-sm font-medium ${e.id === selected?.id ? 'border-accent bg-accent text-white' : 'border-line bg-surface text-ink-2'} ${e.date < today ? 'opacity-60' : ''}`}
           >
             {e.name}
           </button>
         ))}
-        <button onClick={() => setEditing('new')} className="shrink-0 rounded-full border border-dashed border-line px-3 py-1.5 text-sm font-medium text-accent">
+        <button onClick={() => setEditing('new')} className="min-h-9 shrink-0 rounded-full border border-dashed border-line px-3.5 text-sm font-medium text-accent">
           + Rennen
         </button>
       </div>
-
-      {notice && (
-        <div className="flex items-start gap-3 rounded-xl border border-line bg-surface p-3 text-sm text-ink-2">
-          <span className="flex-1">{notice}</span>
-          <button onClick={() => setNotice(null)} className="text-ink-3" aria-label="Hinweis schließen">✕</button>
-        </div>
-      )}
 
       {!selected && !plan.error && (
         <Card>
@@ -63,7 +68,7 @@ export function Plan({ plan }: { plan: PlanState }) {
       {selected && (
         <>
           <EventHeader event={selected} workouts={workouts} today={today} onEdit={() => setEditing(selected)} />
-          <WeekList workouts={workouts} today={today} onOpen={setOpenId} />
+          <WeekList workouts={workouts} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
         </>
       )}
 
@@ -90,11 +95,12 @@ export function Plan({ plan }: { plan: PlanState }) {
           today={today}
           onClose={() => setOpenId(null)}
           onStatus={async (s) => {
+            if (s === 'done') return toggleDone(opened).then(() => setOpenId(null))
             await plan.setStatus(opened, s)
             setOpenId(null)
           }}
           onSkip={async () => {
-            setNotice(await plan.skip(opened))
+            toast(await plan.skip(opened))
             setOpenId(null)
           }}
         />
@@ -144,7 +150,7 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
   )
 }
 
-function WeekList({ workouts, today, onOpen }: { workouts: PlanWorkout[]; today: string; onOpen: (id: string) => void }) {
+function WeekList({ workouts, today, onOpen, onToggle }: { workouts: PlanWorkout[]; today: string; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
   const [showPast, setShowPast] = useState(false)
   const weeks = useMemo(() => {
     const m = new Map<string, PlanWorkout[]>()
@@ -166,13 +172,13 @@ function WeekList({ workouts, today, onOpen }: { workouts: PlanWorkout[]; today:
         </button>
       )}
       {(showPast ? weeks : rest).map(([monday, ws]) => (
-        <Week key={monday} monday={monday} workouts={ws} today={today} onOpen={onOpen} />
+        <Week key={monday} monday={monday} workouts={ws} today={today} onOpen={onOpen} onToggle={onToggle} />
       ))}
     </div>
   )
 }
 
-function Week({ monday, workouts, today, onOpen }: { monday: string; workouts: PlanWorkout[]; today: string; onOpen: (id: string) => void }) {
+function Week({ monday, workouts, today, onOpen, onToggle }: { monday: string; workouts: PlanWorkout[]; today: string; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
   const first = workouts[0]
   const runKm = workouts.filter((w) => w.sport === 'run').reduce((a, w) => a + (w.distance_km ?? 0), 0)
   const mins = workouts.filter((w) => w.sport !== 'race').reduce((a, w) => a + (w.duration_min ?? 0), 0)
@@ -190,8 +196,8 @@ function Week({ monday, workouts, today, onOpen }: { monday: string; workouts: P
       </header>
       <ul className="divide-y divide-line">
         {workouts.map((w) => (
-          <li key={w.id}>
-            <button onClick={() => onOpen(w.id)} className={`flex w-full items-center gap-3 py-2.5 text-left ${w.date === today ? 'font-semibold' : ''}`}>
+          <li key={w.id} className="flex items-center">
+            <button onClick={() => onOpen(w.id)} className={`press-row -ml-2 flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-lg py-2 pl-2 text-left ${w.date === today ? 'font-semibold' : ''}`}>
               <span className="w-8 shrink-0 text-xs text-ink-3">
                 {WEEKDAY_SHORT[weekday(w.date)]}
                 <br />
@@ -207,6 +213,7 @@ function Week({ monday, workouts, today, onOpen }: { monday: string; workouts: P
               </span>
               <StatusMark w={w} today={today} />
             </button>
+            {w.sport !== 'race' && w.status !== 'skipped' && <CheckButton w={w} onToggle={onToggle} />}
           </li>
         ))}
       </ul>
@@ -215,22 +222,34 @@ function Week({ monday, workouts, today, onOpen }: { monday: string; workouts: P
 }
 
 function StatusMark({ w, today }: { w: PlanWorkout; today: string }) {
-  if (w.status === 'done') return <span className="text-xs font-medium" style={{ color: 'var(--good)' }}>✓ Erledigt</span>
+  if (w.status === 'done') return null
   if (w.status === 'skipped') return <span className="text-xs text-ink-3">Ausgelassen</span>
   if (w.date < today) return <span className="text-xs" style={{ color: 'var(--warning)' }}>▲ Offen</span>
   if (w.moved_from) return <span className="text-xs text-ink-3">Verschoben</span>
   return null
 }
 
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+/** Großer runder Haken zum direkten Abhaken in der Liste. */
+function CheckButton({ w, onToggle }: { w: PlanWorkout; onToggle: (w: PlanWorkout) => void }) {
+  const done = w.status === 'done'
   return (
-    <div className="fixed inset-0 z-30 flex flex-col bg-bg">
-      <header className="flex items-center gap-2 border-b border-line bg-surface px-2 pb-2" style={{ paddingTop: 'max(env(safe-area-inset-top), 8px)' }}>
-        <button onClick={onClose} className="rounded-lg px-3 py-2 text-accent">‹ Zurück</button>
-        <span className="font-semibold">{title}</span>
-      </header>
-      <div className="mx-auto w-full max-w-xl flex-1 space-y-3 overflow-y-auto p-4 pb-10">{children}</div>
-    </div>
+    <button
+      onClick={() => onToggle(w)}
+      aria-label={done ? `${w.title}: Haken entfernen` : `${w.title} als erledigt markieren`}
+      aria-pressed={done}
+      className="-mr-2 flex h-12 w-12 shrink-0 items-center justify-center"
+    >
+      <span
+        className="flex h-7 w-7 items-center justify-center rounded-full border-2"
+        style={done ? { background: 'var(--good)', borderColor: 'var(--good)' } : { borderColor: 'var(--border)' }}
+      >
+        {done && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M5 12.5 10 17l9-10" />
+          </svg>
+        )}
+      </span>
+    </button>
   )
 }
 
@@ -251,7 +270,26 @@ function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip }: {
     }
   }
   return (
-    <Sheet title="Einheit" onClose={onClose}>
+    <Sheet
+      title="Einheit"
+      onClose={onClose}
+      footer={
+        w.sport === 'race' ? undefined : w.status === 'planned' ? (
+          <div className="grid grid-cols-2 gap-2">
+            <button disabled={busy} onClick={run(onSkip)} className="min-h-12 rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
+              {w.date >= today ? 'Überspringen' : 'Ausgelassen'}
+            </button>
+            <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl bg-accent text-[15px] font-semibold text-white disabled:opacity-60">
+              Erledigt
+            </button>
+          </div>
+        ) : (
+          <button disabled={busy} onClick={run(() => onStatus('planned'))} className="min-h-12 w-full rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
+            Zurücksetzen auf geplant
+          </button>
+        )
+      }
+    >
       <div>
         <div className="text-xs text-ink-3">
           {dateLabel(w.date, { weekday: 'long', day: 'numeric', month: 'long' })} · Woche {w.week_index} · {PHASE_LABEL[w.phase]}
@@ -265,24 +303,8 @@ function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip }: {
           <p className="text-sm leading-relaxed whitespace-pre-line text-ink-2">{w.description}</p>
         </Card>
       )}
-      {w.sport !== 'race' && (
-        <div className="space-y-2">
-          {w.status === 'planned' ? (
-            <>
-              <button disabled={busy} onClick={run(() => onStatus('done'))} className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-white disabled:opacity-60">
-                Als erledigt markieren
-              </button>
-              <button disabled={busy} onClick={run(onSkip)} className="w-full rounded-xl bg-surface-2 py-3 text-sm font-semibold text-ink disabled:opacity-60">
-                {w.date >= today ? 'Schaffe ich nicht – überspringen' : 'Habe ich ausgelassen'}
-              </button>
-              <p className="text-xs text-ink-3">Wichtige Einheiten verschiebe ich beim Überspringen nach Möglichkeit auf einen freien Tag derselben Woche. Läufe mit der Uhr werden nach dem Sync automatisch abgehakt.</p>
-            </>
-          ) : (
-            <button disabled={busy} onClick={run(() => onStatus('planned'))} className="w-full rounded-xl bg-surface-2 py-3 text-sm font-semibold text-ink disabled:opacity-60">
-              Zurücksetzen auf geplant
-            </button>
-          )}
-        </div>
+      {w.sport !== 'race' && w.status === 'planned' && (
+        <p className="text-xs text-ink-3">Wichtige Einheiten verschiebe ich beim Überspringen nach Möglichkeit auf einen freien Tag derselben Woche. Läufe mit der Uhr werden nach dem Sync automatisch abgehakt.</p>
       )}
     </Sheet>
   )
@@ -350,12 +372,27 @@ function EventForm({ event, onClose, onSave, onDelete }: {
   const label = 'block text-xs font-medium text-ink-2'
 
   return (
-    <Sheet title={event ? 'Rennen bearbeiten' : 'Neues Rennen'} onClose={onClose}>
+    <Sheet
+      title={event ? 'Rennen bearbeiten' : 'Neues Rennen'}
+      onClose={onClose}
+      footer={
+        <>
+          {err && (
+            <p className="text-sm" role="alert" style={{ color: 'var(--critical)' }}>
+              {err}
+            </p>
+          )}
+          <button disabled={busy} onClick={submit} className="min-h-12 w-full rounded-xl bg-accent text-[15px] font-semibold text-white disabled:opacity-60">
+            {busy ? 'Plane …' : event ? 'Speichern' : 'Rennen anlegen und Plan erstellen'}
+          </button>
+        </>
+      }
+    >
       <Card>
         <div className="space-y-4">
           <label className={label}>
             Name
-            <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Berlin Halbmarathon" />
+            <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Berlin Halbmarathon" autoCapitalize="words" enterKeyHint="next" />
           </label>
           <label className={label}>
             Rennform
@@ -406,7 +443,7 @@ function EventForm({ event, onClose, onSave, onDelete }: {
             Trainingstage pro Woche
             <div className="mt-1 grid grid-cols-5 gap-1.5">
               {[3, 4, 5, 6, 7].map((d) => (
-                <button key={d} type="button" onClick={() => setDays(d)} className={`rounded-xl py-2 text-sm font-semibold ${d === days ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}>
+                <button key={d} type="button" onClick={() => setDays(d)} className={`min-h-11 rounded-xl text-[15px] font-semibold ${d === days ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}>
                   {d}
                 </button>
               ))}
@@ -416,7 +453,7 @@ function EventForm({ event, onClose, onSave, onDelete }: {
             Tag für die lange Einheit
             <div className="mt-1 grid grid-cols-7 gap-1">
               {WEEKDAY_SHORT.map((d, i) => (
-                <button key={d} type="button" onClick={() => setLongDay(i)} className={`rounded-xl py-2 text-sm font-semibold ${i === longDay ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}>
+                <button key={d} type="button" onClick={() => setLongDay(i)} className={`min-h-11 rounded-xl text-sm font-semibold ${i === longDay ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}>
                   {d}
                 </button>
               ))}
@@ -429,12 +466,7 @@ function EventForm({ event, onClose, onSave, onDelete }: {
         </div>
       </Card>
 
-      {err && <p className="text-sm" style={{ color: 'var(--critical)' }}>{err}</p>}
       {event && <p className="text-xs text-ink-3">Änderungen an Datum, Rennform, Zielzeit oder Trainingstagen planen ab morgen neu. Bereits Erledigtes bleibt.</p>}
-
-      <button disabled={busy} onClick={submit} className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-white disabled:opacity-60">
-        {busy ? 'Plane …' : event ? 'Speichern' : 'Rennen anlegen und Plan erstellen'}
-      </button>
 
       {event &&
         (confirmDelete ? (

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ZoneBar } from '../components/charts'
+import { Sheet } from '../components/Sheet'
 import { Card, Segmented } from '../components/ui'
 import { dateLabel, duration, km, speed, sportGroup, sportLabel, type SportGroup } from '../lib/format'
 import type { Activity } from '../lib/types'
@@ -13,7 +14,7 @@ export function Activities({ activities, onOpen }: { activities: Activity[]; onO
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-center">
+      <div>
         <Segmented
           value={filter}
           onChange={setFilter}
@@ -27,7 +28,7 @@ export function Activities({ activities, onOpen }: { activities: Activity[]; onO
       </div>
       <div className="overflow-hidden rounded-2xl border border-line bg-surface">
         {list.slice(0, 100).map((a) => (
-          <button key={a.id} onClick={() => onOpen(a.id)} className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-0 active:bg-surface-2">
+          <button key={a.id} onClick={() => onOpen(a.id)} className="press-row flex min-h-16 w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-0">
             <span className="h-9 w-1 shrink-0 rounded-full" style={{ background: GROUP_COLOR[sportGroup(a.sport)] }} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[15px] font-medium">{a.name ?? sportLabel(a.sport)}</div>
@@ -63,11 +64,7 @@ export function ActivityDetail({ activity: a, onClose }: { activity: Activity; o
     ['Kalorien', a.calories != null ? `${Math.round(a.calories)} kcal` : '–'],
   ]
   return (
-    <div className="fixed inset-0 z-30 flex flex-col bg-bg">
-      <header className="flex items-center gap-2 border-b border-line bg-surface px-2 pb-2" style={{ paddingTop: 'max(env(safe-area-inset-top), 8px)' }}>
-        <button onClick={onClose} className="rounded-lg px-3 py-2 text-accent">‹ Zurück</button>
-      </header>
-      <div className="flex-1 space-y-3 overflow-y-auto p-4 pb-10">
+    <Sheet onClose={onClose}>
         <div>
           <div className="text-xs text-ink-3">
             {sportLabel(a.sport)} · {dateLabel(a.start_time, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
@@ -89,7 +86,6 @@ export function ActivityDetail({ activity: a, onClose }: { activity: Activity; o
             <ZoneBar zones={a.hr_zones_s} />
           </Card>
         )}
-      </div>
-    </div>
+    </Sheet>
   )
 }
