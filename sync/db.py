@@ -9,11 +9,17 @@ from typing import Any
 import requests
 
 
+def base_url(url: str) -> str:
+    """Erlaubt auch die REST-URL aus dem Supabase-Dashboard (…/rest/v1/)."""
+    url = url.strip().rstrip("/")
+    return url.removesuffix("/rest/v1")
+
+
 class Supabase:
     def __init__(self, url: str | None = None, key: str | None = None) -> None:
         url = url or os.environ["SUPABASE_URL"]
         key = key or os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-        self.base = url.rstrip("/") + "/rest/v1"
+        self.base = base_url(url) + "/rest/v1"
         self.session = requests.Session()
         self.session.headers.update(
             {
