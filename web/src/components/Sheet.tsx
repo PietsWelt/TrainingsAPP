@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useBackClose } from '../lib/useBackClose'
 
 // Nur in der installierten App: Im Browser hat das Handy selbst schon eine Zurück-Wischgeste.
@@ -15,7 +16,8 @@ export function Sheet({ title, onClose, children, footer }: { title?: string; on
   const [dx, setDx] = useState(0)
   const start = useRef<{ x: number; y: number } | null>(null)
 
-  return (
+  // Portal: Eltern mit transform (z.B. die Einblend-Animation) würden „fixed“ sonst einsperren.
+  return createPortal(
     <div
       className="sheet-in fixed inset-0 z-30 flex flex-col bg-bg"
       style={dx ? { transform: `translateX(${dx}px)`, transition: 'none' } : undefined}
@@ -57,6 +59,7 @@ export function Sheet({ title, onClose, children, footer }: { title?: string; on
           <div className="mx-auto max-w-xl space-y-2">{footer}</div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }

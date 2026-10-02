@@ -10,11 +10,14 @@ import type { PlanWorkout } from '../lib/plan/types'
 import { tap } from '../lib/haptics'
 import { toast } from '../lib/toast'
 import { workoutAmount } from '../lib/plan/labels'
+import { explain } from '../lib/plan/explain'
 import { useMemo } from 'react'
 import { readinessFor } from '../lib/readiness'
 import type { DailyLogState } from '../lib/useDailyLog'
-import { AlcoholCard, GymCard, ProposalCard, ReadinessCard } from './TodayReadiness'
+import { ProposalCard, ReadinessCard } from './TodayReadiness'
+import { CheckInCard } from './CheckIn'
 import { FeedbackCard } from './PlanFeedback'
+import { MobilityCard } from './Mobility'
 
 function garminStatus(score: number): { status: Status; text: string } {
   if (score >= 75) return { status: 'good', text: 'Bereit für Belastung' }
@@ -53,6 +56,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
       <ProposalCard plan={plan} r={own} today={today} log={log} />
       <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
       <FeedbackCard plan={plan} today={today} activities={data.activities} />
+      <MobilityCard activities={data.activities} today={today} />
       {!own && readiness != null && (
         <Card className="p-5">
           <div className="flex items-center gap-5">
@@ -126,8 +130,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
       </Section>
 
       <Section title="Eintragen">
-        <AlcoholCard log={log} today={today} />
-        <GymCard log={log} plan={plan} today={today} strengthToday={data.activities.some((a) => a.local_date === today && /strength|fitness_equipment/.test(a.sport))} />
+        <CheckInCard log={log} plan={plan} today={today} strengthToday={data.activities.some((a) => a.local_date === today && /strength|fitness_equipment/.test(a.sport))} />
       </Section>
 
       <Section title="Training">
@@ -203,6 +206,7 @@ function PlannedToday({ plan, onOpenPlan }: { plan: PlanState; onOpenPlan: () =>
                   {workoutAmount(w)}
                   {plan.events.length > 1 && ` · ${race(w.event_id)}`}
                 </span>
+                {explain(w) && <span className="mt-0.5 text-xs text-ink-2">{explain(w)!.short}</span>}
               </button>
               {w.sport !== 'race' && (
                 <button

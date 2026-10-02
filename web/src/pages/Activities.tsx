@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MobilityButton } from './Mobility'
 import { ZoneBar } from '../components/charts'
 import { Sheet } from '../components/Sheet'
 import { Card, Segmented, SportIcon } from '../components/ui'
@@ -120,6 +121,7 @@ export function ActivityDetail({ activity: a, onClose }: { activity: Activity; o
             <ZoneBar zones={a.hr_zones_s} />
           </Card>
         )}
+        <MobilityButton activity={a} />
     </Sheet>
   )
 }

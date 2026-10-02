@@ -182,10 +182,10 @@ export function IntensityChart({ data }: { data: { week: string; easy: number; h
           <YAxis {...axis} width={44} tickFormatter={(v) => `${v}h`} />
           <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={weekLabel} valueFormat={(v) => hoursMin(v * 3600)} />} />
           <Bar isAnimationActive={false} dataKey="easy" name="Locker (Z1–3)" stackId="i" fill="var(--zone-2)" stroke="var(--surface)" strokeWidth={1} maxBarSize={22} />
-          <Bar isAnimationActive={false} dataKey="hard" name="Hart (Z4–5)" stackId="i" fill="var(--series-2)" stroke="var(--surface)" strokeWidth={1} maxBarSize={22} radius={[6, 6, 0, 0]} />
+          <Bar isAnimationActive={false} dataKey="hard" name="Hart (Z4–5)" stackId="i" fill="var(--zone-5)" stroke="var(--surface)" strokeWidth={1} maxBarSize={22} radius={[6, 6, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
-      <Legend items={[{ label: 'Locker (Zone 1–3)', color: 'var(--zone-2)' }, { label: 'Hart (Zone 4–5)', color: 'var(--series-2)' }]} />
+      <Legend items={[{ label: 'Locker (Zone 1–3)', color: 'var(--zone-2)' }, { label: 'Hart (Zone 4–5)', color: 'var(--zone-5)' }]} />
     </>
   )
 }
@@ -206,7 +206,10 @@ export function ZoneBar({ zones }: { zones: (number | null)[] }) {
       <div className="mt-2 grid grid-cols-5 text-center text-[11px] text-ink-2">
         {zones.map((z, i) => (
           <div key={i}>
-            <div className="font-medium text-ink">{Math.round(((z ?? 0) / total) * 100)}%</div>Z{i + 1}
+            <div className="font-medium text-ink">{Math.round(((z ?? 0) / total) * 100)}%</div>
+            <div className="flex items-center justify-center gap-1">
+              <span className="h-2 w-2 rounded-full" style={{ background: ZONE_COLORS[i] }} />Z{i + 1}
+            </div>
           </div>
         ))}
       </div>

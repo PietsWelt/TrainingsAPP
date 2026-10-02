@@ -22,11 +22,12 @@
   --warning: #fab219;
   --serious: #ec835a;
   --critical: #d03b3b;
-  --zone-1: #86b6ef;
-  --zone-2: #5598e7;
-  --zone-3: #2a78d6;
-  --zone-4: #1c5cab;
-  --zone-5: #104281;
+  /* Pulszonen als Ampel: hellgrün, grün, gelb, orange, rot. */
+  --zone-1: #8fd19e;
+  --zone-2: #1f9d55;
+  --zone-3: #f2b705;
+  --zone-4: #f0712c;
+  --zone-5: #d7263d;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
@@ -46,11 +47,11 @@
     --series-3: #199e70;
     --series-4: #c98500;
     --band: #383835;
-    --zone-1: #184f95;
-    --zone-2: #1c5cab;
-    --zone-3: #2a78d6;
-    --zone-4: #5598e7;
-    --zone-5: #86b6ef;
+    --zone-1: #6fbf80;
+    --zone-2: #26b062;
+    --zone-3: #f5c518;
+    --zone-4: #f5813d;
+    --zone-5: #ef4354;
   }
 }
 
