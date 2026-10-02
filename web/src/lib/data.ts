@@ -49,7 +49,7 @@ async function loadBests(): Promise<Best[]> {
   // Tabelle fehlt, solange Migration 0007 nicht gelaufen ist: dann nur die Läufe.
   const [pr, ...lists] = await Promise.all([sb.from('personal_records').select('type_id,value,activity_id,date'), ...runs])
   const acts = lists.flatMap((l) => (l.data ?? []) as Activity[])
-  return mergeBests((pr.error ? [] : pr.data) as GarminRecord[], bestsFromActivities(acts))
+  return mergeBests((pr.error ? [] : pr.data) as GarminRecord[], bestsFromActivities(acts), acts)
 }
 
 async function latestRun(): Promise<SyncRun | null> {
