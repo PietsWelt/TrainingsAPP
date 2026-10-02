@@ -9,19 +9,23 @@ from typing import Any
 import requests
 
 
+def base_url(url: str) -> str:
+    """Erlaubt auch die REST-URL aus dem Supabase-Dashboard (…/rest/v1/)."""
+    url = url.strip().rstrip("/")
+    return url.removesuffix("/rest/v1")
+
+
 class Supabase:
     def __init__(self, url: str | None = None, key: str | None = None) -> None:
         url = url or os.environ["SUPABASE_URL"]
-        key = key or os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-        self.base = url.rstrip("/") + "/rest/v1"
+        key = (key or os.environ["SUPABASE_SERVICE_ROLE_KEY"]).strip()
+        self.base = base_url(url) + "/rest/v1"
         self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "apikey": key,
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-            }
-        )
+        self.session.headers.update({"apikey": key, "Content-Type": "application/json"})
+        # Alte service_role-Keys sind JWTs und gehören zusätzlich in Authorization.
+        # Neue sb_secret_-Keys sind keine JWTs; dort würde der Header mit "Invalid JWT" abgelehnt.
+        if key.startswith("eyJ"):
+            self.session.headers["Authorization"] = f"Bearer {key}"
 
     def select(self, table: str, params: dict[str, str]) -> list[dict[str, Any]]:
         r = self.session.get(f"{self.base}/{table}", params=params, timeout=30)

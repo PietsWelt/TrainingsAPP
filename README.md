@@ -25,12 +25,12 @@ Garmin Connect ──(python-garminconnect, alle 30 min + Knopf)──► GitHub
 2. **SQL Editor** öffnen, Inhalt von `supabase/migrations/0001_init.sql` einfügen, **Run**.
 3. **Authentication → Users → Add user**: deine E-Mail und ein Passwort (das ist der App-Login, nicht Garmin).
 4. **Authentication → Sign In / Providers**: „Allow new users to sign up“ **ausschalten**. Damit bist du der einzige Nutzer.
-5. **Project Settings → API**: `Project URL`, `anon`-Key und `service_role`-Key notieren.
+5. **Project Settings → API**: `Project URL` (z.B. `https://xxxx.supabase.co`, ohne `/rest/v1`), `anon`-Key und `service_role`-Key notieren.
 
 ### 2. GitHub-Einstellungen im Repo
 **Settings → Secrets and variables → Actions**
 
-- Tab **Secrets**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (geheim, nie in die App!)
+- Tab **Secrets**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` = der „secret“-Key (`sb_secret_…`) oder der Legacy-`service_role`-Key (geheim, nie in die App!)
 - Tab **Variables**: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (für die App)
 
 **Settings → Pages → Source: GitHub Actions**
