@@ -290,13 +290,18 @@ function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip }: {
 
 // ---------- Rennen anlegen / bearbeiten ----------
 
-function parseGoal(s: string): number | null | 'invalid' {
-  const t = s.trim()
-  if (!t) return null
-  const parts = t.split(':').map((x) => Number(x))
-  if (parts.some((x) => !Number.isFinite(x) || x < 0) || parts.length < 2 || parts.length > 3) return 'invalid'
-  const [h, m, sec] = parts.length === 3 ? parts : [0, ...parts]
-  return h * 3600 + m * 60 + sec
+// Zielzeit als drei Zahlenfelder: Die Zahlentastatur am Handy hat keinen Doppelpunkt.
+function splitGoal(total: number | null | undefined): [string, string, string] {
+  if (!total) return ['', '', '']
+  return [String(Math.floor(total / 3600)), String(Math.floor((total % 3600) / 60)), String(total % 60)]
+}
+
+function joinGoal([h, m, s]: [string, string, string]): number | null | 'invalid' {
+  if (!h.trim() && !m.trim() && !s.trim()) return null
+  const n = [h, m, s].map((x) => (x.trim() ? Number(x) : 0))
+  if (n.some((x) => !Number.isInteger(x) || x < 0) || n[1] > 59 || n[2] > 59) return 'invalid'
+  const total = n[0] * 3600 + n[1] * 60 + n[2]
+  return total > 0 ? total : null
 }
 
 const DEFAULT_DAYS: Record<EventType, number> = { '5k': 4, '10k': 4, half: 4, marathon: 5, tri_sprint: 5, tri_olympic: 6, tri_70_3: 6, tri_ironman: 6 }
@@ -311,7 +316,7 @@ function EventForm({ event, onClose, onSave, onDelete }: {
   const [name, setName] = useState(event?.name ?? '')
   const [type, setType] = useState<EventType>(event?.type ?? 'half')
   const [date, setDate] = useState(event?.date ?? addDays(today, 16 * 7))
-  const [goal, setGoal] = useState(event?.goal_time_s ? fmtDuration(event.goal_time_s).replace(/ (h|min)$/, '') : '')
+  const [goal, setGoal] = useState(splitGoal(event?.goal_time_s))
   const [days, setDays] = useState(event?.days_per_week ?? DEFAULT_DAYS['half'])
   const [longDay, setLongDay] = useState(event?.long_day ?? 6)
   const [notes, setNotes] = useState(event?.notes ?? '')
@@ -320,14 +325,14 @@ function EventForm({ event, onClose, onSave, onDelete }: {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const weeks = Math.floor(daysBetween(today, date) / 7)
-  const goalS = parseGoal(goal)
+  const goalS = joinGoal(goal)
   const dist = raceDistanceKm(type)
   const pace = dist && typeof goalS === 'number' && goalS > 0 ? fmtPace(goalS / dist) : null
 
   async function submit() {
     if (!name.trim()) return setErr('Bitte einen Namen eingeben.')
     if (!date || date <= today) return setErr('Das Renndatum muss in der Zukunft liegen.')
-    if (goalS === 'invalid') return setErr('Zielzeit bitte als h:mm:ss oder mm:ss eingeben, z. B. 1:45:00.')
+    if (goalS === 'invalid') return setErr('Zielzeit bitte als ganze Zahlen eingeben, Minuten und Sekunden höchstens 59.')
     setBusy(true)
     setErr(null)
     try {
@@ -373,11 +378,30 @@ function EventForm({ event, onClose, onSave, onDelete }: {
             <input type="date" className={field} value={date} min={addDays(today, 1)} onChange={(e) => setDate(e.target.value)} />
             {weeks >= 0 && <span className="mt-1 block font-normal text-ink-3">{weeks} Wochen Vorbereitung{weeks < 6 ? ' – knapp, der Plan wird kurz.' : ''}</span>}
           </label>
-          <label className={label}>
+          <div className={label}>
             Zielzeit (optional)
-            <input className={field} value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="h:mm:ss" inputMode="numeric" />
+            <div className="mt-1 grid grid-cols-3 gap-2">
+              {(['Std', 'Min', 'Sek'] as const).map((unit, i) => (
+                <label key={unit} className="relative block">
+                  <input
+                    className={`${field.replace('mt-1 ', '')} pr-12`}
+                    value={goal[i]}
+                    onChange={(e) => {
+                      const next = [...goal] as [string, string, string]
+                      next[i] = e.target.value.replace(/\D/g, '').slice(0, 2)
+                      setGoal(next)
+                    }}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
+                    aria-label={`Zielzeit ${unit}`}
+                  />
+                  <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm font-normal text-ink-3">{unit}</span>
+                </label>
+              ))}
+            </div>
             {pace && <span className="mt-1 block font-normal text-ink-3">Entspricht {pace} min/km</span>}
-          </label>
+          </div>
           <div className={label}>
             Trainingstage pro Woche
             <div className="mt-1 grid grid-cols-5 gap-1.5">
