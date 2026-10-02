@@ -80,7 +80,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday()):
           if (w.status !== 'done' || w.feedback || w.activity_id == null || w.date < addDays(today, -3)) continue
           const act = activities.find((a) => a.id === w.activity_id)
           // Ersatzsport (z.B. Rad statt Lauf) wird nicht als Lauf ausgewertet.
-          const res = act && sportGroup(act.sport) === w.sport && analyzeRun(w, act)
+          const res = act && sportGroup(act.sport) === w.sport && analyzeRun(w, act, activities)
           if (!res) continue
           const fb = giveFeedback(current, w.id, res.verdict, today).changed
           const step = merge(fb, shiftPaces(merge(current, fb), w, res.group, res.paceShift, today))
@@ -146,7 +146,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday()):
       const { changed, message } = giveFeedback(workouts, w.id, feedback, today)
       // Weichst du von der automatischen Auswertung ab, wird deren Tempo-Anpassung zurückgenommen.
       const act = w.activity_id != null ? activities?.find((a) => a.id === w.activity_id) : undefined
-      const auto = act ? analyzeRun(w, act) : null
+      const auto = act ? analyzeRun(w, act, activities) : null
       const undo = auto && auto.paceShift && w.feedback === auto.verdict && feedback !== auto.verdict ? shiftPaces(workouts, w, auto.group, -auto.paceShift, today) : []
       const all = merge(changed, undo)
       await planStore.updateWorkouts(all)

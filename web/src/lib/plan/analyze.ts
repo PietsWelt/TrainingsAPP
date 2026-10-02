@@ -3,6 +3,7 @@ import { sportGroup } from '../format'
 // gegen das Ziel der Einheit. Daraus folgt „zu leicht / passend / zu hart“ und eine kleine
 // Anpassung der Zieltempos künftiger Einheiten derselben Art.
 
+import { personalAet, shareAbove, shareBelow, type Aet } from '../aet'
 import { heatPct, HOT_PCT } from '../heat'
 import type { Activity } from '../types'
 import { fmtPace } from './generate'
@@ -53,24 +54,57 @@ function forConditions(r: Analysis | null, a: Activity): Analysis | null {
   return r.group === 'easy' ? { ...r, verdict: 'ok', reasons: [...r.reasons, note], paceShift: 0 } : { ...r, reasons: [...r.reasons, note], paceShift: 0 }
 }
 
-export function analyzeRun(w: PlanWorkout, a: Activity): Analysis | null {
-  return forConditions(rawAnalysis(w, a), a)
+/** `all` sind alle Aktivitäten: Daraus kommt bei Läufen mit Brustgurt deine aerobe Schwelle. */
+export function analyzeRun(w: PlanWorkout, a: Activity, all?: Activity[]): Analysis | null {
+  return forConditions(rawAnalysis(w, a, all), a)
 }
 
-function rawAnalysis(w: PlanWorkout, a: Activity): Analysis | null {
+/** Spielraum über der aeroben Schwelle: Messunsicherheit und dein Wohlfühlbereich Zone 2–3. */
+export const AET_MARGIN = 5
+
+const easyLimit = (k: Kind) => (k === 'recovery' ? 0.1 : k === 'long' ? 0.2 : 0.15)
+
+/**
+ * Lockerer Lauf mit Brustgurt und bekannter aerober Schwelle: Statt Garmins Zonen zählt die Zeit
+ * deutlich über deiner eigenen Schwelle. Das ist die Grenze, die lockeres Laufen ausmacht (Seiler 2010).
+ */
+function byThreshold(w: PlanWorkout, a: Activity, aet: Aet): Analysis | null {
+  const limitHr = aet.hr + AET_MARGIN
+  const above = shareAbove(a.hr_hist, limitHr)
+  const below = shareBelow(a.hr_hist, aet.hr - 20)
+  if (above == null || below == null) return null
+  const limit = easyLimit(w.kind)
+  const ref = `deiner aeroben Schwelle (${aet.hr} bpm, aus dem Brustgurt)`
+  if (above > limit || (w.kind !== 'long' && (a.aerobic_te ?? 0) >= 4.2)) {
+    const reasons = [`${pct(above)} der Zeit mehr als ${AET_MARGIN} Schläge über ${ref}. Ziel: höchstens ${pct(limit)}.`]
+    if ((a.aerobic_te ?? 0) >= 4.2) reasons.push(`Aerober Trainingseffekt ${a.aerobic_te?.toFixed(1)}, für einen lockeren Lauf zu hoch.`)
+    return { verdict: 'hard', reasons, paceShift: w.kind === 'recovery' ? 0 : above > 0.35 ? 15 : 10, group: 'easy' }
+  }
+  if (w.kind !== 'recovery' && below > 0.6) {
+    return { verdict: 'easy', reasons: [`${pct(below)} der Zeit mehr als 20 Schläge unter ${ref}.`], paceShift: -5, group: 'easy' }
+  }
+  return { verdict: 'ok', reasons: [`Nur ${pct(above)} der Zeit deutlich über ${ref}. Passt.`], paceShift: 0, group: 'easy' }
+}
+
+function rawAnalysis(w: PlanWorkout, a: Activity, all?: Activity[]): Analysis | null {
   if (w.sport !== 'run') return null
   const z = (a.hr_zones_s ?? []).map((x) => x ?? 0)
   const total = z.reduce((s, x) => s + x, 0)
   const share = (from: number, to = 5) => (total ? z.slice(from - 1, to).reduce((s, x) => s + x, 0) / total : 0)
-  const zonesOk = zonesPlausible(a)
+  // Mit Brustgurt ist der Puls verlässlich: Dann gilt auch viel Zone 5 nicht als Messfehler.
+  const strap = a.hr_source === 'strap'
+  const zonesOk = strap ? total > 0 : zonesPlausible(a)
   const rpe = a.rpe != null ? a.rpe / 10 : null
 
   if (EASY_KINDS.includes(w.kind)) {
+    const aet = strap && a.hr_hist ? personalAet(all, a.local_date) : null
+    const own = aet && byThreshold(w, a, aet)
+    if (own) return own
     // Zone 2–3 ist für lockere Läufe in Ordnung; zu hart ist erst Zeit ab Zone 4.
     if (!zonesOk) return null
     const above = share(4)
     const z1 = share(1, 1)
-    const limit = w.kind === 'recovery' ? 0.1 : w.kind === 'long' ? 0.2 : 0.15
+    const limit = easyLimit(w.kind)
     if (above > limit || (w.kind !== 'long' && (a.aerobic_te ?? 0) >= 4.2)) {
       const reasons = [`${pct(above)} der Zeit in Zone 4 oder höher (Ziel: höchstens ${pct(limit)}).`]
       if ((a.aerobic_te ?? 0) >= 4.2) reasons.push(`Aerober Trainingseffekt ${a.aerobic_te?.toFixed(1)}, für einen lockeren Lauf zu hoch.`)
@@ -86,12 +120,17 @@ function rawAnalysis(w: PlanWorkout, a: Activity): Analysis | null {
     // Bei harten Einheiten sind die Zonen oft falsch: entscheidend ist deine Anstrengung,
     // ohne sie nur ein sehr deutlicher Trainingseffekt.
     const te = a.aerobic_te
-    if (rpe == null && te == null) return null
+    if (rpe == null && te == null && !(strap && total > 0)) return null
     const reasons: string[] = []
     if (rpe != null) reasons.push(`Deine Anstrengung auf der Uhr: ${rpe.toFixed(0)}/10.`)
     if (te != null) reasons.push(`Trainingseffekt aerob ${te.toFixed(1)}, anaerob ${(a.anaerobic_te ?? 0).toFixed(1)}.`)
     if (rpe == null) reasons.push('Gib nach dem Lauf auf der Uhr deine Anstrengung ein, dann wird die Bewertung genauer.')
-    const hard = rpe != null ? rpe >= 9 : (te ?? 0) >= 5
+    // Mit Brustgurt strenger: Schwellen- und Renntempo-Läufe gehören kaum in Zone 5. Fühlte es sich
+    // aber nur mittel an (bis 6/10), sind eher Garmins Zonengrenzen falsch als das Tempo.
+    const z5 = share(5, 5)
+    const strapHot = strap && total > 0 && (w.kind === 'tempo' || w.kind === 'race_pace') && z5 > 0.25 && (rpe == null || rpe >= 7)
+    if (strapHot) reasons.push(`Brustgurt: ${pct(z5)} der Zeit in Zone 5. Bei dieser Einheit sollte der Puls meist darunter bleiben.`)
+    const hard = (rpe != null ? rpe >= 9 : (te ?? 0) >= 5) || strapHot
     const easy = rpe != null ? rpe <= 4 : te != null && te < 2 && (a.anaerobic_te ?? 0) < 1
     if (hard) return { verdict: 'hard', reasons, paceShift: 4, group: 'quality' }
     if (easy) return { verdict: 'easy', reasons: [...reasons, 'Der Reiz war eher gering.'], paceShift: -3, group: 'quality' }
@@ -159,5 +198,5 @@ export function merge(...lists: PlanWorkout[][]): PlanWorkout[] {
 
 export function analysisFor(w: PlanWorkout, activities: Activity[] | undefined): Analysis | null {
   const a = w.activity_id != null ? activities?.find((x) => x.id === w.activity_id) : undefined
-  return a && sportGroup(a.sport) === w.sport ? analyzeRun(w, a) : null
+  return a && sportGroup(a.sport) === w.sport ? analyzeRun(w, a, activities) : null
 }

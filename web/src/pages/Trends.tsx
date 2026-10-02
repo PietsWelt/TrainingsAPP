@@ -11,6 +11,7 @@ import type { DrinksByDate, GymByDate } from '../lib/dailyLog'
 import { addDays } from '../lib/plan/dates'
 import { readinessSeries } from '../lib/readiness'
 import type { Dataset } from '../lib/types'
+import { AetCard } from './AetCard'
 import { WeekReviewButton } from './WeekReview'
 
 type Range = '4w' | '3m' | '6m'
@@ -175,6 +176,8 @@ export function Trends({ data, drinks, gym, plan }: { data: Dataset; drinks: Dri
             )}
           </Card>
         )}
+
+        <AetCard activities={data.activities} from={addDays(today, -n + 1)} />
 
         <Card title="Laufumfang pro Woche" subtitle={avgKm != null ? `Ø ${avgKm.toFixed(1).replace('.', ',')} km` : undefined}>
           <WeeklyDistanceChart data={weeks} />

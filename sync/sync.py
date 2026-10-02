@@ -18,6 +18,7 @@ from typing import Any, Callable
 from garminconnect import Garmin
 
 from db import Supabase
+from fitfile import analyze as analyze_fit, fit_bytes, frames
 from mapping import activity_row, daily_row, decoupling, gap_factor, pr_row, prediction_row, race_row
 from weather import weather_at
 from watch import push_workouts
@@ -144,6 +145,37 @@ def sync_drift(client: Garmin, db: Supabase) -> int:
     return len(runs)
 
 
+FIT_PER_RUN = int(os.getenv("FIT_PER_RUN", "6"))
+FIT_V = 1
+FIT_DAYS = 120
+
+
+def sync_fit(client: Garmin, db: Supabase, today: date) -> int:
+    """Original-Datei neuer Läufe: Brustgurt oder Handgelenk, Puls-Verteilung, DFA-alpha1 und aerobe Schwelle."""
+    runs = db.select(
+        "activities",
+        {
+            "select": "id",
+            "fit_v": f"lt.{FIT_V}",
+            "sport": "like.*running*",
+            "duration_s": "gte.600",
+            "local_date": f"gte.{(today - timedelta(days=FIT_DAYS)).isoformat()}",
+            "order": "start_time.desc",
+            "limit": str(FIT_PER_RUN),
+        },
+    )
+    done = 0
+    for r in runs:
+        blob = safe(lambda: client.download_activity(r["id"], dl_fmt=Garmin.ActivityDownloadFormat.ORIGINAL), "Original-Datei")
+        if not blob:
+            continue  # beim nächsten Sync erneut versuchen
+        row = safe(lambda: analyze_fit(frames(fit_bytes(blob))), "FIT-Auswertung")
+        # Kaputte Datei: als erledigt markieren, damit sie nicht jedes Mal neu geladen wird.
+        db.update("activities", {"id": r["id"]}, {**(row or {}), "fit_v": FIT_V})
+        done += 1
+    return done
+
+
 WEATHER_PER_RUN = int(os.getenv("WEATHER_PER_RUN", "25"))
 
 
@@ -218,6 +250,9 @@ def main() -> int:
         drift = safe(lambda: sync_drift(client, db), "Runden-Auswertung")
         if drift:
             log.info("Runden: %d Läufe ausgewertet", drift)
+        fit = safe(lambda: sync_fit(client, db, today), "Original-Dateien")
+        if fit:
+            log.info("Original-Dateien: %d Läufe ausgewertet", fit)
         weather = safe(lambda: sync_weather(db, today), "Wetter")
         if weather:
             log.info("Wetter: %d Aktivitäten ergänzt", weather)

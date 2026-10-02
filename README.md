@@ -22,7 +22,7 @@ Garmin Connect ──(python-garminconnect, alle 30 min + Knopf)──► GitHub
 
 ### 1. Supabase
 1. Auf [supabase.com](https://supabase.com) kostenloses Projekt anlegen (Region Frankfurt).
-2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql`, `0004_feedback_watch.sql`, `0005_gym.sql`, `0006_sync_cron.sql`, `0007_personal_records.sql`, `0008_drift_prognose.sql`, `0009_garmin_races.sql`, `0010_sicherheit.sql` und `0011_wetter_steigung.sql` einfügen, jeweils **Run**. In `0006_sync_cron.sql` vorher die zwei Platzhalter ersetzen (steht oben in der Datei); sie startet den Sync alle 30 Minuten. `0010_sicherheit.sql` erlaubt Lesen und Schreiben nur dem ersten angelegten Nutzer (Schritt 3 also vorher erledigen und danach erneut ausführen, falls nötig).
+2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql`, `0004_feedback_watch.sql`, `0005_gym.sql`, `0006_sync_cron.sql`, `0007_personal_records.sql`, `0008_drift_prognose.sql`, `0009_garmin_races.sql`, `0010_sicherheit.sql`, `0011_wetter_steigung.sql` und `0012_brustgurt.sql` einfügen, jeweils **Run**. In `0006_sync_cron.sql` vorher die zwei Platzhalter ersetzen (steht oben in der Datei); sie startet den Sync alle 30 Minuten. `0010_sicherheit.sql` erlaubt Lesen und Schreiben nur dem ersten angelegten Nutzer (Schritt 3 also vorher erledigen und danach erneut ausführen, falls nötig).
 3. **Authentication → Users → Add user**: deine E-Mail und ein Passwort (das ist der App-Login, nicht Garmin).
 4. **Authentication → Sign In / Providers**: „Allow new users to sign up“ **ausschalten**. Damit bist du der einzige Nutzer.
 5. **Project Settings → API**: `Project URL` (z.B. `https://xxxx.supabase.co`, ohne `/rest/v1`), `anon`-Key und `service_role`-Key notieren.
@@ -59,6 +59,12 @@ Der Sync legt die geplanten Lauf- und Radeinheiten der nächsten 7 Tage als Work
 (Name beginnt mit „Plan · “) und trägt sie in den Kalender ein. Die Uhr holt sie beim nächsten Abgleich mit dem Handy.
 Ändert sich eine Einheit in der App, wird sie beim nächsten Sync ersetzt; übersprungene und alte Einheiten werden wieder entfernt.
 Eigene Workouts ohne den Präfix bleiben unberührt. Abschalten: Repo-Variable `WATCH_DAYS` = `0`.
+
+### Brustgurt (optional)
+Läufe mit Brustgurt (z. B. HRM 600) wertet der Sync aus der Original-Datei (FIT) aus: Pulsquelle, Puls-Verteilung und,
+wenn auf der Uhr **System › Datenaufzeichnung › HRV aufzeichnen** an ist, DFA-alpha1 aus den einzelnen Herzschlägen.
+Daraus schätzt die App deine aerobe Schwelle (Trends) und bewertet lockere Läufe mit Gurt daran statt an Garmins Zonen.
+Pro Sync werden bis zu 6 Läufe der letzten 120 Tage nachgeholt (`FIT_PER_RUN`).
 
 ### 5. Aufs Handy
 `https://pietswelt.github.io/TrainingsAPP/` öffnen, einloggen, dann

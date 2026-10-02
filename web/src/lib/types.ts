@@ -28,6 +28,15 @@ export interface Activity {
   dew_point_c?: number | null
   /** Steigungsbereinigung: Pace × Faktor = Pace auf flacher Strecke bei gleicher Anstrengung. */
   gap_factor?: number | null
+  /** Pulsquelle laut Original-Datei: Brustgurt oder Handgelenk (Migration 0012). */
+  hr_source?: 'strap' | 'wrist' | null
+  /** Sekunden je 5er-Pulsbereich, z.B. {"140": 300} = 5 min bei 140–144 bpm. */
+  hr_hist?: Record<string, number> | null
+  /** Ø DFA-alpha1 des Laufs (nur Gurt mit „HRV aufzeichnen“). Über 0,75 = unter der aeroben Schwelle. */
+  dfa_a1?: number | null
+  /** Aus diesem Lauf geschätzte aerobe Schwelle (bpm) und das Tempo dort (m/s). */
+  aet_hr?: number | null
+  aet_speed_mps?: number | null
 }
 
 export interface DailyMetrics {
