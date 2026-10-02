@@ -5,7 +5,7 @@ import { toast } from './lib/toast'
 import { usePullToRefresh } from './lib/usePullToRefresh'
 import { useDailyLog } from './lib/useDailyLog'
 import type { Session } from '@supabase/supabase-js'
-import { loadDataset, triggerSync } from './lib/data'
+import { loadDataset, syncAndWait } from './lib/data'
 import { dateLabel, relativeTime } from './lib/format'
 import { localToday } from './lib/plan/dates'
 import { supabase } from './lib/supabase'
@@ -76,12 +76,10 @@ function Main() {
   async function syncNow() {
     setSyncing(true)
     try {
-      await triggerSync()
-      // Der Sync läuft in GitHub Actions; ein paar Mal nachladen, bis neue Daten da sind.
-      for (const wait of [45, 45, 60]) {
-        await new Promise((r) => setTimeout(r, wait * 1000))
-        void refresh()
-      }
+      const run = await syncAndWait()
+      await refresh()
+      if (run?.status === 'error') toast('Sync fehlgeschlagen. Details stehen in GitHub unter Actions.', 'error')
+      else if (run) toast('Garmin-Daten aktualisiert.')
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {

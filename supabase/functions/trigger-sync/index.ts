@@ -16,6 +16,10 @@ Deno.serve(async (req) => {
     return Response.json({ error: "GITHUB_TOKEN oder GITHUB_REPO fehlt" }, { status: 500, headers: cors });
   }
 
+  // Der Zeitplan in Supabase schickt {"trigger": "schedule"}, der Knopf in der App nichts.
+  const body = await req.json().catch(() => ({}));
+  const trigger = body?.trigger === "schedule" ? "schedule" : "manual";
+
   const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/sync.yml/dispatches`, {
     method: "POST",
     headers: {
@@ -23,7 +27,7 @@ Deno.serve(async (req) => {
       Accept: "application/vnd.github+json",
       "User-Agent": "trainingsapp-sync",
     },
-    body: JSON.stringify({ ref: "main", inputs: { trigger: "manual" } }),
+    body: JSON.stringify({ ref: "main", inputs: { trigger } }),
   });
 
   if (!res.ok) {
