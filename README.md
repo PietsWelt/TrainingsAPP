@@ -16,13 +16,13 @@ Garmin Connect ──(python-garminconnect, alle 30 min + Knopf)──► GitHub
 | `web/` | PWA (Vite, React, Tailwind, Recharts). Ohne Supabase-Werte startet sie im Demo-Modus. |
 | `sync/` | Python-Sync von Garmin nach Supabase, `login.py` für den einmaligen Garmin-Login |
 | `supabase/` | Datenbank-Schema und Edge Function für „Jetzt synchronisieren“ |
-| `.github/workflows/` | `sync.yml` (Zeitplan), `pages.yml` (App veröffentlichen), `ci.yml` (Tests) |
+| `.github/workflows/` | `sync.yml` (Garmin-Sync), `pages.yml` (App veröffentlichen), `ci.yml` (Tests) |
 
 ## Einrichtung (einmalig, ca. 20 Minuten)
 
 ### 1. Supabase
 1. Auf [supabase.com](https://supabase.com) kostenloses Projekt anlegen (Region Frankfurt).
-2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql`, `0004_feedback_watch.sql` und `0005_gym.sql` einfügen, jeweils **Run**.
+2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql`, `0004_feedback_watch.sql`, `0005_gym.sql` und `0006_sync_cron.sql` einfügen, jeweils **Run**. In `0006_sync_cron.sql` vorher die zwei Platzhalter ersetzen (steht oben in der Datei); sie startet den Sync alle 30 Minuten.
 3. **Authentication → Users → Add user**: deine E-Mail und ein Passwort (das ist der App-Login, nicht Garmin).
 4. **Authentication → Sign In / Providers**: „Allow new users to sign up“ **ausschalten**. Damit bist du der einzige Nutzer.
 5. **Project Settings → API**: `Project URL` (z.B. `https://xxxx.supabase.co`, ohne `/rest/v1`), `anon`-Key und `service_role`-Key notieren.
