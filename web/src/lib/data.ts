@@ -27,5 +27,14 @@ export async function loadDataset(days = 180): Promise<Dataset> {
 export async function triggerSync(): Promise<void> {
   if (!supabase) return
   const { error } = await supabase.functions.invoke('trigger-sync', { method: 'POST' })
-  if (error) throw new Error(error.message)
+  if (error) {
+    // FunctionsFetchError/FunctionsRelayError: Funktion fehlt oder ist nicht erreichbar.
+    const status = (error as { context?: { status?: number } }).context?.status
+    const missing = error.name === 'FunctionsFetchError' || error.name === 'FunctionsRelayError' || status === 404
+    throw new Error(
+      missing
+        ? 'Der Sync-Knopf ist noch nicht eingerichtet (README, Schritt 4). Der automatische Sync alle 30 Minuten läuft trotzdem.'
+        : `Sync konnte nicht gestartet werden: ${error.message}`,
+    )
+  }
 }
