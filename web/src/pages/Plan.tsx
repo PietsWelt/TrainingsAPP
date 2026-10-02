@@ -11,11 +11,13 @@ import type { PlanState } from '../lib/plan/usePlan'
 import { stepLines, workoutAmount } from '../lib/plan/labels'
 import { AnalysisBlock, FeedbackChips } from './PlanFeedback'
 import { analysisFor } from '../lib/plan/analyze'
-import type { Activity } from '../lib/types'
+import type { Activity, RacePrediction } from '../lib/types'
+import type { Best } from '../lib/records'
+import { RaceCheck } from './PlanInsights'
 import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
 
-export function Plan({ plan, activities }: { plan: PlanState; activities?: Activity[] }) {
+export function Plan({ plan, activities, records, predictions }: { plan: PlanState; activities?: Activity[]; records?: Best[]; predictions?: RacePrediction[] }) {
   const today = localToday()
   const upcoming = plan.events.filter((e) => e.date >= today)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -70,6 +72,7 @@ export function Plan({ plan, activities }: { plan: PlanState; activities?: Activ
       {selected && (
         <>
           <EventHeader event={selected} workouts={workouts} today={today} onEdit={() => setEditing(selected)} />
+          <RaceCheck event={selected} workouts={workouts} activities={activities ?? []} records={records ?? []} predictions={predictions} today={today} />
           <WeekList workouts={workouts} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
         </>
       )}

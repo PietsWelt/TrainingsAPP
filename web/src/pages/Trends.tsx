@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
-import { HrvChart, IntensityChart, SimpleLineChart, SleepChart, WeeklyDistanceChart, WeeklyDrinksChart, WeeklyTimeChart } from '../components/charts'
-import { Card, Section, Segmented } from '../components/ui'
+import { DriftChart, EfficiencyChart, FitnessChart, HrvChart, IntensityChart, SimpleLineChart, SleepChart, WeeklyDistanceChart, WeeklyDrinksChart, WeeklyTimeChart } from '../components/charts'
+import { Card, Section, Segmented, StatusLabel } from '../components/ui'
+import { fitnessSeries, formZone } from '../lib/fitness'
+import { localToday } from '../lib/plan/dates'
+import type { PlanState } from '../lib/plan/usePlan'
 import { sportGroup, weekStart } from '../lib/format'
 import { lastDays, weeklyTotals } from '../lib/derive'
 import { avg, hoursMin } from '../lib/format'
@@ -12,7 +15,7 @@ import type { Dataset } from '../lib/types'
 type Range = '4w' | '3m' | '6m'
 const RANGE_DAYS: Record<Range, number> = { '4w': 28, '3m': 91, '6m': 182 }
 
-export function Trends({ data, drinks, gym }: { data: Dataset; drinks: DrinksByDate; gym?: GymByDate }) {
+export function Trends({ data, drinks, gym, plan }: { data: Dataset; drinks: DrinksByDate; gym?: GymByDate; plan?: PlanState }) {
   const [range, setRange] = useState<Range>('3m')
   const n = RANGE_DAYS[range]
   const days = lastDays(data.days, n)
@@ -45,6 +48,36 @@ export function Trends({ data, drinks, gym }: { data: Dataset; drinks: DrinksByD
     row.easy += z[0] + z[1] + z[2]
     row.hard += z[3] + z[4]
   }
+  // Fitness und Form, mit Plan fortgeschrieben bis zum nächsten Rennen (höchstens 26 Wochen).
+  const today = localToday()
+  const race = plan?.events.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0]
+  const raceDay = race && race.date <= addDays(today, 182) ? race.date : undefined
+  const fitness = useMemo(
+    () => fitnessSeries(data.activities, plan?.workouts.filter((w) => !raceDay || w.date <= raceDay) ?? [], addDays(today, -n + 1), raceDay ?? today, today),
+    [data.activities, plan?.workouts, n, raceDay, today],
+  )
+  const formToday = fitness.find((d) => d.date === today)
+  const formRace = raceDay ? fitness.at(-1) : undefined
+
+  // Aerobe Effizienz lockerer Läufe (ab 30 min, kaum anaerob): Meter pro Herzschlag, Wochenschnitt.
+  const effWeeks = weeks.map((w) => ({ date: w.week, sum: 0, n: 0 }))
+  for (const a of data.activities) {
+    if (sportGroup(a.sport) !== 'run' || !a.avg_hr || !a.avg_speed_mps || (a.duration_s ?? 0) < 1800 || (a.anaerobic_te ?? 0) >= 1.5) continue
+    const row = effWeeks.find((x) => x.date === weekStart(a.local_date))
+    if (row) {
+      row.sum += (a.avg_speed_mps * 60) / a.avg_hr
+      row.n++
+    }
+  }
+  const efficiency = effWeeks.map((x) => ({ date: x.date, value: x.n ? Math.round((x.sum / x.n) * 100) / 100 : null }))
+  const effVals = efficiency.filter((x) => x.value != null).map((x) => x.value!)
+  const effChange = effVals.length >= 4 ? Math.round(((effVals.at(-1)! - effVals[0]) / effVals[0]) * 1000) / 10 : null
+  const drift = data.activities
+    .filter((a) => a.decoupling_pct != null && a.local_date >= addDays(today, -n + 1))
+    .map((a) => ({ date: a.local_date, drift: a.decoupling_pct! }))
+    .reverse()
+  const driftAvg = avg(drift.map((d) => d.drift))
+
   const easySum = intensity.reduce((s, x) => s + x.easy, 0)
   const hardSum = intensity.reduce((s, x) => s + x.hard, 0)
   const easyShare = easySum + hardSum > 0 ? Math.round((easySum / (easySum + hardSum)) * 100) : null
@@ -97,6 +130,49 @@ export function Trends({ data, drinks, gym }: { data: Dataset; drinks: DrinksByD
       </Section>
 
       <Section title="Training">
+        <Card
+          title="Fitness und Form"
+          subtitle={formToday ? `Form heute ${formToday.form > 0 ? '+' : ''}${formToday.form}${formRace ? ` · am Renntag laut Plan ${formRace.form > 0 ? '+' : ''}${formRace.form}` : ''}` : undefined}
+        >
+          {formToday && (
+            <p className="mb-2 text-sm">
+              <StatusLabel status={formZone(formToday.form).status}>{formZone(formToday.form).label}</StatusLabel>
+              <span className="text-ink-2"> · {formZone(formToday.form).text}</span>
+            </p>
+          )}
+          <FitnessChart data={fitness} today={today} race={raceDay} />
+          <p className="mt-2 text-xs text-ink-3">
+            Aus Garmins Trainingslast aller Sportarten.{raceDay && ` Gestrichelt: geschätzt aus deinem Plan bis ${race?.name}. Für das Rennen ist eine Form zwischen +5 und +25 ideal.`}
+          </p>
+        </Card>
+
+        {(effVals.length >= 2 || drift.length > 0) && (
+          <Card
+            title="Aerobe Form"
+            subtitle={[
+              effChange != null ? `Effizienz ${effChange > 0 ? '+' : ''}${effChange.toLocaleString('de-DE')} % im Zeitraum` : null,
+              driftAvg != null ? `Ø Puls-Drift ${driftAvg.toFixed(1).replace('.', ',')} %` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          >
+            {effVals.length >= 2 && (
+              <>
+                <div className="text-xs font-medium text-ink-2">Meter pro Herzschlag bei lockeren Läufen (steigend = fitter)</div>
+                <EfficiencyChart data={efficiency} />
+              </>
+            )}
+            {drift.length > 0 ? (
+              <>
+                <div className="mt-3 text-xs font-medium text-ink-2">Puls-Drift pro Lauf ab 40 min (unter 5 % = stabile Grundlage)</div>
+                <DriftChart data={drift} />
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-ink-3">Die Puls-Drift erscheint nach dem nächsten Sync.</p>
+            )}
+          </Card>
+        )}
+
         <Card title="Laufumfang pro Woche" subtitle={avgKm != null ? `Ø ${avgKm.toFixed(1).replace('.', ',')} km` : undefined}>
           <WeeklyDistanceChart data={weeks} />
         </Card>

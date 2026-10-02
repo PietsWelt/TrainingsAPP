@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { dateLabel, hoursMin } from '../lib/format'
 import { ChartTooltip } from './ChartTooltip'
 import { Legend } from './ui'
@@ -133,7 +133,7 @@ export function HrvChart({ data }: { data: { date: string; hrv: number | null; b
   )
 }
 
-export function SimpleLineChart({ data, unit, name, height = 160, color = 'var(--series-1)' }: { data: { date: string; value: number | null }[]; unit: string; name: string; height?: number; color?: string }) {
+export function SimpleLineChart({ data, unit, name, height = 160, color = 'var(--series-1)', decimals = 0 }: { data: { date: string; value: number | null }[]; unit: string; name: string; height?: number; color?: string; decimals?: number }) {
   const id = useId().replace(/:/g, '')
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -146,8 +146,14 @@ export function SimpleLineChart({ data, unit, name, height = 160, color = 'var(-
         </defs>
         {grid}
         <XAxis dataKey="date" tickFormatter={shortDate} {...axis} minTickGap={24} />
-        <YAxis {...axis} width={44} domain={[(m: number) => Math.floor(m - 1), (m: number) => Math.ceil(m + 1)]} allowDecimals={false} />
-        <Tooltip cursor={lineCursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => `${v.toLocaleString('de-DE')} ${unit}`} />} />
+        <YAxis
+          {...axis}
+          width={44}
+          domain={decimals ? ['auto', 'auto'] : [(m: number) => Math.floor(m - 1), (m: number) => Math.ceil(m + 1)]}
+          allowDecimals={decimals > 0}
+          tickFormatter={(v: number) => v.toLocaleString('de-DE', { maximumFractionDigits: decimals })}
+        />
+        <Tooltip cursor={lineCursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => `${v.toLocaleString('de-DE', { maximumFractionDigits: decimals })} ${unit}`} />} />
         <Area
           isAnimationActive={false}
           type="monotone"
@@ -205,5 +211,73 @@ export function ZoneBar({ zones }: { zones: (number | null)[] }) {
         ))}
       </div>
     </div>
+  )
+}
+
+/** Fitness, Ermüdung und Form; geplante Tage gestrichelt, Linien bei heute und am Renntag. */
+export function FitnessChart({ data, today, race }: { data: { date: string; fitness: number; fatigue: number; form: number; projected: boolean }[]; today: string; race?: string }) {
+  const rows = data.map((d) => ({
+    date: d.date,
+    fitness: d.projected ? null : d.fitness,
+    fatigue: d.projected ? null : d.fatigue,
+    form: d.projected ? null : d.form,
+    // Plan-Werte beginnen am heutigen Tag, damit die Linien lückenlos anschließen.
+    fitnessP: d.projected || d.date === today ? d.fitness : null,
+    fatigueP: d.projected || d.date === today ? d.fatigue : null,
+    formP: d.projected || d.date === today ? d.form : null,
+  }))
+  const hasPlan = data.some((d) => d.projected)
+  return (
+    <>
+      <ResponsiveContainer width="100%" height={210}>
+        <ComposedChart data={rows} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
+          {grid}
+          <XAxis dataKey="date" tickFormatter={shortDate} {...axis} minTickGap={28} />
+          <YAxis {...axis} width={44} allowDecimals={false} />
+          <ReferenceLine y={0} stroke="var(--text-3)" strokeOpacity={0.5} />
+          {hasPlan && <ReferenceLine x={today} stroke="var(--text-3)" strokeDasharray="3 3" label={{ value: 'heute', position: 'insideTopLeft', fill: 'var(--text-3)', fontSize: 10 }} />}
+          {race && <ReferenceLine x={race} stroke="var(--critical)" strokeDasharray="3 3" label={{ value: 'Rennen', position: 'insideTopRight', fill: 'var(--critical)', fontSize: 10 }} />}
+          <Tooltip cursor={lineCursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => String(Math.round(v))} />} />
+          <Area isAnimationActive={false} dataKey="form" name="Form" fill="var(--series-3)" fillOpacity={0.18} stroke="var(--series-3)" strokeWidth={1.5} connectNulls={false} />
+          <Area isAnimationActive={false} dataKey="formP" name="Form (Plan)" fill="var(--series-3)" fillOpacity={0.08} stroke="var(--series-3)" strokeWidth={1.5} strokeDasharray="4 3" />
+          <Line isAnimationActive={false} dataKey="fitness" name="Fitness" stroke="var(--series-1)" strokeWidth={2.2} dot={false} />
+          <Line isAnimationActive={false} dataKey="fitnessP" name="Fitness (Plan)" stroke="var(--series-1)" strokeWidth={2.2} strokeDasharray="4 3" dot={false} />
+          <Line isAnimationActive={false} dataKey="fatigue" name="Ermüdung" stroke="var(--series-2)" strokeWidth={1.4} dot={false} />
+          <Line isAnimationActive={false} dataKey="fatigueP" name="Ermüdung (Plan)" stroke="var(--series-2)" strokeWidth={1.4} strokeDasharray="4 3" dot={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <Legend
+        items={[
+          { label: 'Fitness (42 Tage)', color: 'var(--series-1)' },
+          { label: 'Ermüdung (7 Tage)', color: 'var(--series-2)' },
+          { label: 'Form', color: 'var(--series-3)' },
+        ]}
+      />
+    </>
+  )
+}
+
+/** Aerobe Effizienz (Meter pro Herzschlag) lockerer Läufe; steigend = fitter. */
+export function EfficiencyChart({ data }: { data: { date: string; value: number | null }[] }) {
+  return <SimpleLineChart data={data} unit="m/Schlag" name="Effizienz" height={150} color="var(--series-3)" decimals={2} />
+}
+
+/** Puls-Drift je Lauf; unter 5 % gilt die Grundlage als gut. */
+export function DriftChart({ data }: { data: { date: string; drift: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={150}>
+      <BarChart data={data} margin={{ top: 8, right: 0, left: -12, bottom: 0 }}>
+        {grid}
+        <XAxis dataKey="date" tickFormatter={shortDate} {...axis} minTickGap={24} />
+        <YAxis {...axis} width={44} tickFormatter={(v) => `${v}%`} allowDecimals={false} />
+        <ReferenceLine y={5} stroke="var(--warning)" strokeDasharray="4 3" />
+        <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => `${v.toLocaleString('de-DE')} %`} />} />
+        <Bar isAnimationActive={false} dataKey="drift" name="Puls-Drift" radius={[4, 4, 4, 4]} maxBarSize={14}>
+          {data.map((d) => (
+            <Cell key={d.date} fill={d.drift > 5 ? 'var(--warning)' : 'var(--good)'} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   )
 }

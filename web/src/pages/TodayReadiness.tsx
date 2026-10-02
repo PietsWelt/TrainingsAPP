@@ -128,7 +128,9 @@ export function AlcoholCard({ log, today }: { log: DailyLogState; today: string 
   async function set(date: string, n: number) {
     tap()
     try {
-      await log.setDrinks(date, log.drinks[date] === n ? null : n)
+      const off = log.drinks[date] === n
+      await log.setDrinks(date, off ? null : n)
+      toast(off ? 'Eintrag entfernt.' : `Gespeichert: ${n === 5 ? '5 oder mehr' : n} ${n === 1 ? 'Getränk' : 'Getränke'}. Fließt in die Readiness ein.`)
     } catch (e) {
       toast((e as Error).message, 'error')
     }
@@ -187,8 +189,14 @@ export function GymCard({ log, plan, today, strengthToday }: { log: DailyLogStat
     tap()
     const cur = log.gym[date]
     try {
-      if (focus == null || (cur?.focus === focus && hard === undefined)) await log.setGym(date, null)
-      else await log.setGym(date, { focus, hard: hard ?? cur?.hard ?? true })
+      if (focus == null || (cur?.focus === focus && hard === undefined)) {
+        await log.setGym(date, null)
+        toast('Eintrag entfernt.')
+      } else {
+        const h = hard ?? cur?.hard ?? true
+        await log.setGym(date, { focus, hard: h })
+        toast(`Gespeichert: ${FOCUS.find((f) => f.id === focus)?.label}, ${h ? 'hart' : 'locker'}.`)
+      }
     } catch (e) {
       toast((e as Error).message, 'error')
     }

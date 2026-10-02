@@ -84,6 +84,7 @@ export function demoDataset(): Dataset {
         calories: Math.round(dur / 60 * 11),
         hr_zones_s: zones.map((z) => Math.round(z * dur)),
         rpe: isRun ? (hard ? 80 : 40) : null,
+        decoupling_pct: isRun && !hard && dur > 2400 ? Math.round((7 - fitness * 4 + (r() - 0.5) * 4) * 10) / 10 : null,
       })
     }
   }
@@ -92,6 +93,7 @@ export function demoDataset(): Dataset {
   return {
     activities,
     days,
+    predictions: [{ date: days.at(-1)!.date, time_5k: 1225, time_10k: 2560, time_half: 5690, time_marathon: 12050 }],
     records: mergeBests(
       [
         { type_id: 1, value: 221, activity_id: null, date: '2026-05-14' },

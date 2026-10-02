@@ -19,7 +19,7 @@ from typing import Any, Callable
 from garminconnect import Garmin
 
 from db import Supabase
-from mapping import activity_row, daily_row, pr_row
+from mapping import activity_row, daily_row, decoupling, pr_row, prediction_row
 from watch import push_workouts
 
 log = logging.getLogger("sync")
@@ -111,6 +111,38 @@ def sync_records(client: Garmin, db: Supabase) -> int:
     return len(rows)
 
 
+DRIFT_PER_RUN = int(os.getenv("DRIFT_PER_RUN", "15"))
+
+
+def sync_drift(client: Garmin, db: Supabase) -> int:
+    """Puls-Drift für Läufe ab 40 Minuten, die noch nicht ausgewertet sind (neueste zuerst, gedrosselt)."""
+    runs = db.select(
+        "activities",
+        {
+            "select": "id",
+            "splits_checked": "is.false",
+            "sport": "like.*running*",
+            "duration_s": "gte.2400",
+            "order": "start_time.desc",
+            "limit": str(DRIFT_PER_RUN),
+        },
+    )
+    for r in runs:
+        splits = safe(lambda: client.get_activity_splits(r["id"]), f"Runden {r['id']}")
+        if splits is None:
+            continue  # beim nächsten Sync erneut versuchen
+        value = decoupling(splits.get("lapDTOs") or [])
+        db.update("activities", {"id": r["id"]}, {"decoupling_pct": value, "splits_checked": True})
+    return len(runs)
+
+
+def sync_prediction(client: Garmin, db: Supabase, today: date) -> bool:
+    row = prediction_row(today.isoformat(), client.get_race_predictions())
+    if row:
+        db.upsert("race_predictions", row, "date")
+    return row is not None
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     db = Supabase()
@@ -121,6 +153,10 @@ def main() -> int:
         n_act = sync_activities(client, db, today)
         n_days = sync_days(client, db, days_to_sync(db, today))
         safe(lambda: sync_records(client, db), "Bestzeiten")
+        safe(lambda: sync_prediction(client, db, today), "Rennzeit-Prognose")
+        drift = safe(lambda: sync_drift(client, db), "Puls-Drift")
+        if drift:
+            log.info("Puls-Drift: %d Läufe ausgewertet", drift)
         watch = safe(lambda: push_workouts(client, db, today, WATCH_DAYS), "Workouts auf die Uhr")
         if watch:
             log.info("Uhr: %s", watch)
