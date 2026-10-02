@@ -9,12 +9,14 @@ import { addDays, daysBetween, localToday, mondayOf, WEEKDAY_LONG, WEEKDAY_SHORT
 import { fmtDuration, fmtPace, raceDistanceKm } from '../lib/plan/generate'
 import type { PlanState } from '../lib/plan/usePlan'
 import { stepLines, workoutAmount } from '../lib/plan/labels'
-import { FeedbackChips } from './PlanFeedback'
+import { AnalysisBlock, FeedbackChips } from './PlanFeedback'
+import { analysisFor } from '../lib/plan/analyze'
+import type { Activity } from '../lib/types'
 import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
 const SPORT_ICON: Record<PlanWorkout['sport'], string> = { run: '🏃', bike: '🚴', swim: '🏊', race: '🏁' }
 
-export function Plan({ plan }: { plan: PlanState }) {
+export function Plan({ plan, activities }: { plan: PlanState; activities?: Activity[] }) {
   const today = localToday()
   const upcoming = plan.events.filter((e) => e.date >= today)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -93,6 +95,7 @@ export function Plan({ plan }: { plan: PlanState }) {
       {opened && (
         <WorkoutSheet
           workout={opened}
+          activities={activities}
           today={today}
           onClose={() => setOpenId(null)}
           onStatus={async (s) => {
@@ -269,8 +272,9 @@ function CheckButton({ w, onToggle }: { w: PlanWorkout; onToggle: (w: PlanWorkou
   )
 }
 
-function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip, onRestore, onRate }: {
+function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip, onRestore, onRate }: {
   workout: PlanWorkout
+  activities?: Activity[]
   today: string
   onClose: () => void
   onStatus: (s: PlanWorkout['status']) => Promise<void>
@@ -330,7 +334,8 @@ function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip, onRestore,
         {w.garmin_workout_id && w.status === 'planned' && <div className="mt-1 text-xs text-ink-3">⌚ Liegt auf deiner Uhr unter „Training“</div>}
       </div>
       {w.status === 'done' && w.sport !== 'race' && (
-        <Card title="Wie war's?">
+        <Card title={analysisFor(w, activities) ? 'Auswertung' : "Wie war's?"}>
+          {analysisFor(w, activities) && <AnalysisBlock a={analysisFor(w, activities)!} />}
           <FeedbackChips value={w.feedback} onPick={(f) => run(() => onRate(f))()} disabled={busy} />
         </Card>
       )}

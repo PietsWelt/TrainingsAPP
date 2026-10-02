@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Activity } from '../types'
 import { autoComplete, fillSteps, giveFeedback, skipWorkout } from './adapt'
+import { analyzeRun, merge, shiftPaces } from './analyze'
 import { addDays, localToday } from './dates'
 import { fitnessFrom } from './fitness'
 import { generatePlan } from './generate'
@@ -54,8 +55,24 @@ export function usePlan(activities: Activity[] | undefined): PlanState {
               return fillSteps(ws.filter((w) => w.event_id === e.id && !done.some((d) => d.id === w.id)), fresh, today)
             })
         : []
-      if (done.length || filled.length) await planStore.updateWorkouts([...done, ...filled])
-      const byId = new Map([...done, ...filled].map((w) => [w.id, w]))
+      // Frisch erledigte Läufe mit Uhr-Daten automatisch auswerten (nur die letzten 3 Tage, nie rückwirkend).
+      let current = ws.map((w) => [...done, ...filled].find((c) => c.id === w.id) ?? w)
+      let analyzed: PlanWorkout[] = []
+      if (hasColumn('feedback') && activities) {
+        for (const w of current) {
+          if (w.status !== 'done' || w.feedback || w.activity_id == null || w.date < addDays(today, -3)) continue
+          const act = activities.find((a) => a.id === w.activity_id)
+          const res = act && analyzeRun(w, act)
+          if (!res) continue
+          const fb = giveFeedback(current, w.id, res.verdict, today).changed
+          const step = merge(fb, shiftPaces(merge(current, fb), w, res.group, res.paceShift, today))
+          analyzed = merge(analyzed, step)
+          current = current.map((x) => step.find((c) => c.id === x.id) ?? x)
+        }
+      }
+      const all = merge(done, filled, analyzed)
+      if (all.length) await planStore.updateWorkouts(all)
+      const byId = new Map(current.map((w) => [w.id, w]))
       setEvents(ev)
       setWorkouts(ws.map((w) => byId.get(w.id) ?? w))
       setError(null)
@@ -107,10 +124,16 @@ export function usePlan(activities: Activity[] | undefined): PlanState {
     },
     async rate(w, feedback) {
       if (!hasColumn('feedback')) throw new Error('Zum Speichern bitte einmal supabase/migrations/0004_feedback_watch.sql im SQL-Editor ausführen.')
-      const { changed, message } = giveFeedback(workouts, w.id, feedback, localToday())
-      await planStore.updateWorkouts(changed)
-      apply(changed)
-      return message
+      const today = localToday()
+      const { changed, message } = giveFeedback(workouts, w.id, feedback, today)
+      // Weichst du von der automatischen Auswertung ab, wird deren Tempo-Anpassung zurückgenommen.
+      const act = w.activity_id != null ? activities?.find((a) => a.id === w.activity_id) : undefined
+      const auto = act ? analyzeRun(w, act) : null
+      const undo = auto && auto.paceShift && w.feedback === auto.verdict && feedback !== auto.verdict ? shiftPaces(workouts, w, auto.group, -auto.paceShift, today) : []
+      const all = merge(changed, undo)
+      await planStore.updateWorkouts(all)
+      apply(all)
+      return undo.length ? `${message} Die Tempo-Anpassung von vorhin ist zurückgenommen.` : message
     },
     async skip(w) {
       const { changed, message } = skipWorkout(workouts, w.id, localToday())

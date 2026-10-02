@@ -16,6 +16,8 @@ export interface Activity {
   anaerobic_te: number | null
   calories: number | null
   hr_zones_s: (number | null)[] | null
+  /** Anstrengung, die du nach dem Lauf auf der Uhr eingibst (Garmin speichert 10–100). */
+  rpe?: number | null
 }
 
 export interface DailyMetrics {
