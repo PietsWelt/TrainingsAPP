@@ -38,6 +38,13 @@ def test_structured_run_becomes_repeat_group_with_pace_window():
     assert rec["endCondition"]["conditionTypeKey"] == "time"
 
 
+def test_easy_run_gets_pace_range():
+    w = garmin_workout({**INTERVALS, "steps": [{"type": "run", "m": 8000, "pace": 330, "pace_slow": 370}]})
+    (step,) = w["workoutSegments"][0]["workoutSteps"]
+    assert step["targetValueOne"] == round(1000 / 370, 4)
+    assert step["targetValueTwo"] == round(1000 / 330, 4)
+
+
 def test_without_targets_and_simple_runs():
     w = garmin_workout(INTERVALS, with_targets=False)
     assert "targetValueOne" not in w["workoutSegments"][0]["workoutSteps"][1]["workoutSteps"][0]

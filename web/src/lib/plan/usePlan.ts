@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { Activity } from '../types'
-import { autoComplete, giveFeedback, skipWorkout } from './adapt'
+import { autoComplete, fillSteps, giveFeedback, skipWorkout } from './adapt'
 import { addDays, localToday } from './dates'
 import { fitnessFrom } from './fitness'
 import { generatePlan } from './generate'
@@ -43,9 +43,19 @@ export function usePlan(activities: Activity[] | undefined): PlanState {
   const reload = useCallback(async () => {
     try {
       const [ev, ws] = await Promise.all([planStore.listEvents(), planStore.listWorkouts()])
-      const done = activities ? autoComplete(ws, activities, localToday()) : []
-      if (done.length) await planStore.updateWorkouts(done)
-      const byId = new Map(done.map((w) => [w.id, w]))
+      const today = localToday()
+      const done = activities ? autoComplete(ws, activities, today) : []
+      // Ablauf für die Uhr bei älteren Plänen nachtragen (Plan ab heute neu berechnen, nur Abläufe übernehmen).
+      const filled = hasColumn('steps')
+        ? ev
+            .filter((e) => e.date >= today)
+            .flatMap((e) => {
+              const fresh = generatePlan(e, fitnessFrom(activities ?? [], today), addDays(today, -1), () => crypto.randomUUID())
+              return fillSteps(ws.filter((w) => w.event_id === e.id && !done.some((d) => d.id === w.id)), fresh, today)
+            })
+        : []
+      if (done.length || filled.length) await planStore.updateWorkouts([...done, ...filled])
+      const byId = new Map([...done, ...filled].map((w) => [w.id, w]))
       setEvents(ev)
       setWorkouts(ws.map((w) => byId.get(w.id) ?? w))
       setError(null)

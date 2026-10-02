@@ -5,7 +5,7 @@ import { sportGroup } from '../format'
 import type { Activity } from '../types'
 import { addDays, mondayOf, WEEKDAY_LONG, weekday } from './dates'
 import type { Readiness } from '../readiness'
-import type { Feedback, PlanWorkout } from './types'
+import type { Feedback, PlanWorkout, Step } from './types'
 
 export interface Change {
   changed: PlanWorkout[]
@@ -265,4 +265,30 @@ export function giveFeedback(all: PlanWorkout[], id: string, feedback: Feedback 
     changed,
     message: longer.length ? 'Zweimal hintereinander zu leicht: Lockere und lange Einheiten der nächsten 7 Tage sind 5 % länger.' : 'Notiert.',
   }
+}
+
+// ---------- Ablauf für ältere Pläne nachtragen ----------
+
+/** Passt den lockeren ersten Abschnitt so an, dass die Summe der Strecke der Einheit entspricht. */
+function fitSteps(steps: Step[], distanceKm: number | null): Step[] {
+  if (!distanceKm || steps.some((s) => s.type === 'repeat')) return steps
+  const [first, ...rest] = steps
+  if (first.type === 'repeat' || !first.m || rest.some((s) => s.type === 'repeat' || (!s.m && s.time_s))) return steps
+  const others = rest.reduce((a, s) => a + (s.type !== 'repeat' && s.m ? s.m : 0), 0)
+  return [{ ...first, m: Math.max(1000, Math.round(distanceKm * 10) * 100 - others) }, ...rest]
+}
+
+/**
+ * Pläne von vor Etappe 4 haben keinen Ablauf für die Uhr. Der Ablauf wird aus einem frisch
+ * erzeugten Plan übernommen (gleicher Tag und Titel); Umfang und Anpassungen bleiben, wie sie sind.
+ */
+export function fillSteps(plan: PlanWorkout[], fresh: PlanWorkout[], today: string): PlanWorkout[] {
+  const byKey = new Map(fresh.filter((w) => w.steps?.length).map((w) => [`${w.date}|${w.title}`, w.steps!]))
+  const changed: PlanWorkout[] = []
+  for (const w of plan) {
+    if (w.status !== 'planned' || w.date < today || w.sport !== 'run' || w.steps != null || w.original) continue
+    const steps = byKey.get(`${w.moved_from ?? w.date}|${w.title}`)
+    if (steps) changed.push({ ...w, steps: fitSteps(steps, w.distance_km) })
+  }
+  return changed
 }

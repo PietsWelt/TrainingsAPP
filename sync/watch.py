@@ -79,9 +79,11 @@ class _Builder:
         pace = s.get("pace")
         if pace and self.with_targets:
             # Garmin erwartet Geschwindigkeiten in m/s: langsame Grenze zuerst.
+            slow = s.get("pace_slow") or pace + PACE_WINDOW_S
+            fast = pace if s.get("pace_slow") else max(60, pace - PACE_WINDOW_S)
             out["targetType"] = PACE
-            out["targetValueOne"] = round(1000 / (pace + PACE_WINDOW_S), 4)
-            out["targetValueTwo"] = round(1000 / max(60, pace - PACE_WINDOW_S), 4)
+            out["targetValueOne"] = round(1000 / slow, 4)
+            out["targetValueTwo"] = round(1000 / fast, 4)
         return out
 
     def any(self, s: dict[str, Any]) -> dict[str, Any]:
