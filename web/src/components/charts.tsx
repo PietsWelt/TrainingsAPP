@@ -19,7 +19,7 @@ export function WeeklyDistanceChart({ data }: { data: { week: string; km: number
         <XAxis dataKey="week" tickFormatter={shortDate} {...axis} minTickGap={16} />
         <YAxis {...axis} width={44} />
         <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={weekLabel} valueFormat={(v) => `${v.toFixed(1).replace('.', ',')} km`} />} />
-        <Bar dataKey="km" name="Laufen" fill="var(--series-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+        <Bar isAnimationActive={false} dataKey="km" name="Laufen" fill="var(--series-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
       </BarChart>
     </ResponsiveContainer>
   )
@@ -44,6 +44,7 @@ export function WeeklyTimeChart({ data }: { data: { week: string; run: number; b
           <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={weekLabel} valueFormat={(v) => hoursMin(v * 3600)} />} />
           {used.map((s, i) => (
             <Bar
+              isAnimationActive={false}
               key={s.key}
               dataKey={s.key}
               name={s.label}
@@ -80,6 +81,7 @@ export function SleepChart({ data }: { data: { date: string; deep: number; light
           <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => hoursMin(v * 3600)} />} />
           {SLEEP_SERIES.map((s, i) => (
             <Bar
+              isAnimationActive={false}
               key={s.key}
               dataKey={s.key}
               name={s.label}
@@ -107,8 +109,8 @@ export function HrvChart({ data }: { data: { date: string; hrv: number | null; b
           <XAxis dataKey="date" tickFormatter={shortDate} {...axis} minTickGap={24} />
           <YAxis {...axis} width={44} domain={[(m: number) => Math.floor((m - 3) / 5) * 5, (m: number) => Math.ceil((m + 3) / 5) * 5]} allowDecimals={false} />
           <Tooltip cursor={lineCursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => `${v} ms`} />} />
-          <Area dataKey="band" name="Normalbereich" fill="var(--band)" stroke="none" fillOpacity={0.8} isAnimationActive={false} />
-          <Line dataKey="hrv" name="HRV" stroke="var(--series-1)" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2 }} connectNulls />
+          <Area isAnimationActive={false} dataKey="band" name="Normalbereich" fill="var(--band)" stroke="none" fillOpacity={0.8} />
+          <Line isAnimationActive={false} dataKey="hrv" name="HRV" stroke="var(--series-1)" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2 }} connectNulls />
         </ComposedChart>
       </ResponsiveContainer>
       <Legend items={[{ label: 'HRV (Nacht)', color: 'var(--series-1)' }, { label: 'Normalbereich', color: 'var(--band)' }]} />
@@ -124,7 +126,7 @@ export function SimpleLineChart({ data, unit, name, height = 160 }: { data: { da
         <XAxis dataKey="date" tickFormatter={shortDate} {...axis} minTickGap={24} />
         <YAxis {...axis} width={44} domain={[(m: number) => Math.floor(m - 1), (m: number) => Math.ceil(m + 1)]} allowDecimals={false} />
         <Tooltip cursor={lineCursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => `${v.toLocaleString('de-DE')} ${unit}`} />} />
-        <Line dataKey="value" name={name} stroke="var(--series-1)" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2 }} connectNulls />
+        <Line isAnimationActive={false} dataKey="value" name={name} stroke="var(--series-1)" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2 }} connectNulls />
       </LineChart>
     </ResponsiveContainer>
   )
