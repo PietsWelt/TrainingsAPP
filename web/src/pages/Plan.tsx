@@ -4,12 +4,13 @@ import { toast } from '../lib/toast'
 import { Card } from '../components/ui'
 import { dateLabel } from '../lib/format'
 import { tap } from '../lib/haptics'
-import { progressOf, restoreOriginal } from '../lib/plan/adapt'
+import { FEEDBACK_LABEL, progressOf, restoreOriginal } from '../lib/plan/adapt'
 import { addDays, daysBetween, localToday, mondayOf, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from '../lib/plan/dates'
 import { fmtDuration, fmtPace, raceDistanceKm } from '../lib/plan/generate'
 import type { PlanState } from '../lib/plan/usePlan'
-import { workoutAmount } from '../lib/plan/labels'
-import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
+import { stepLines, workoutAmount } from '../lib/plan/labels'
+import { FeedbackChips } from './PlanFeedback'
+import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
 const SPORT_ICON: Record<PlanWorkout['sport'], string> = { run: '🏃', bike: '🚴', swim: '🏊', race: '🏁' }
 
@@ -107,6 +108,13 @@ export function Plan({ plan }: { plan: PlanState }) {
             await plan.applyChanges([restoreOriginal(opened)])
             toast('Ursprüngliche Einheit wiederhergestellt.')
             setOpenId(null)
+          }}
+          onRate={async (f) => {
+            try {
+              toast(await plan.rate(opened, f))
+            } catch (e) {
+              toast((e as Error).message, 'error')
+            }
           }}
         />
       )}
@@ -214,7 +222,10 @@ function Week({ monday, workouts, today, onOpen, onToggle }: { monday: string; w
                   {w.title}
                   {w.key_session && w.sport !== 'race' && <span className="ml-1.5 text-xs" style={{ color: 'var(--series-2)' }}>●</span>}
                 </span>
-                <span className="block text-xs font-normal text-ink-3">{workoutAmount(w)}</span>
+                <span className="block text-xs font-normal text-ink-3">
+                  {workoutAmount(w)}
+                  {w.feedback && w.feedback !== 'ok' && ` · ${FEEDBACK_LABEL[w.feedback].toLowerCase()}`}
+                </span>
               </span>
               <StatusMark w={w} today={today} />
             </button>
@@ -258,13 +269,14 @@ function CheckButton({ w, onToggle }: { w: PlanWorkout; onToggle: (w: PlanWorkou
   )
 }
 
-function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip, onRestore }: {
+function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip, onRestore, onRate }: {
   workout: PlanWorkout
   today: string
   onClose: () => void
   onStatus: (s: PlanWorkout['status']) => Promise<void>
   onSkip: () => Promise<void>
   onRestore: () => Promise<void>
+  onRate: (f: Feedback | null) => Promise<void>
 }) {
   const [busy, setBusy] = useState(false)
   const run = (f: () => Promise<void>) => async () => {
@@ -315,10 +327,28 @@ function WorkoutSheet({ workout: w, today, onClose, onStatus, onSkip, onRestore 
         <div className="mt-1 text-sm text-ink-2">{workoutAmount(w)}</div>
         {w.moved_from && <div className="mt-1 text-xs text-ink-3">Verschoben von {WEEKDAY_LONG[weekday(w.moved_from)]}</div>}
         {w.original && <div className="mt-1 text-xs text-ink-3">An deine Readiness angepasst, ursprünglich: {w.original.title}</div>}
+        {w.garmin_workout_id && w.status === 'planned' && <div className="mt-1 text-xs text-ink-3">⌚ Liegt auf deiner Uhr unter „Training“</div>}
       </div>
+      {w.status === 'done' && w.sport !== 'race' && (
+        <Card title="Wie war's?">
+          <FeedbackChips value={w.feedback} onPick={(f) => run(() => onRate(f))()} disabled={busy} />
+        </Card>
+      )}
       {w.description && (
         <Card>
           <p className="text-sm leading-relaxed whitespace-pre-line text-ink-2">{w.description}</p>
+        </Card>
+      )}
+      {w.steps && w.steps.length > 1 && (
+        <Card title="Ablauf auf der Uhr">
+          <ol className="space-y-1.5 text-sm">
+            {stepLines(w.steps).map((line, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="w-4 shrink-0 text-ink-3">{i + 1}.</span>
+                <span>{line}</span>
+              </li>
+            ))}
+          </ol>
         </Card>
       )}
       {w.sport !== 'race' && w.status === 'planned' && !w.original && (

@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { Activity } from '../types'
-import { autoComplete, skipWorkout } from './adapt'
+import { autoComplete, giveFeedback, skipWorkout } from './adapt'
 import { addDays, localToday } from './dates'
 import { fitnessFrom } from './fitness'
 import { generatePlan } from './generate'
-import { planStore } from './store'
-import type { PlanWorkout, RaceEvent } from './types'
+import { hasColumn, planStore } from './store'
+import type { Feedback, PlanWorkout, RaceEvent } from './types'
 
 export interface PlanState {
   events: RaceEvent[]
@@ -20,6 +20,8 @@ export interface PlanState {
   skip(w: PlanWorkout): Promise<string>
   /** Speichert beliebige geänderte Einheiten (z.B. Anpassung an die Readiness). */
   applyChanges(changed: PlanWorkout[]): Promise<void>
+  /** Einschätzung nach der Einheit; liefert den Hinweistext. */
+  rate(w: PlanWorkout, feedback: Feedback | null): Promise<string>
 }
 
 // Nur diese Felder ändern den Plan; Name und Notizen nicht.
@@ -92,6 +94,13 @@ export function usePlan(activities: Activity[] | undefined): PlanState {
     async applyChanges(changed) {
       await planStore.updateWorkouts(changed)
       apply(changed)
+    },
+    async rate(w, feedback) {
+      if (!hasColumn('feedback')) throw new Error('Zum Speichern bitte einmal supabase/migrations/0004_feedback_watch.sql im SQL-Editor ausführen.')
+      const { changed, message } = giveFeedback(workouts, w.id, feedback, localToday())
+      await planStore.updateWorkouts(changed)
+      apply(changed)
+      return message
     },
     async skip(w) {
       const { changed, message } = skipWorkout(workouts, w.id, localToday())

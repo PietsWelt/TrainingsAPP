@@ -22,7 +22,7 @@ Garmin Connect ──(python-garminconnect, alle 30 min + Knopf)──► GitHub
 
 ### 1. Supabase
 1. Auf [supabase.com](https://supabase.com) kostenloses Projekt anlegen (Region Frankfurt).
-2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql` und `0003_readiness.sql` einfügen, jeweils **Run**.
+2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql` und `0004_feedback_watch.sql` einfügen, jeweils **Run**.
 3. **Authentication → Users → Add user**: deine E-Mail und ein Passwort (das ist der App-Login, nicht Garmin).
 4. **Authentication → Sign In / Providers**: „Allow new users to sign up“ **ausschalten**. Damit bist du der einzige Nutzer.
 5. **Project Settings → API**: `Project URL` (z.B. `https://xxxx.supabase.co`, ohne `/rest/v1`), `anon`-Key und `service_role`-Key notieren.
@@ -52,6 +52,12 @@ Danach den Codespace löschen. Anschließend unter **Actions → Garmin Sync →
 1. GitHub: **Settings → Developer settings → Fine-grained tokens**, Zugriff nur auf dieses Repo, Berechtigung **Actions: Read and write**.
 2. Supabase: **Edge Functions → Deploy a new function → via Editor**, Name `trigger-sync`, Inhalt aus `supabase/functions/trigger-sync/index.ts`.
 3. Supabase: **Edge Functions → Secrets**: `GITHUB_TOKEN` (Token von oben), `GITHUB_REPO` = `PietsWelt/TrainingsAPP`.
+
+### Workouts auf der Uhr
+Der Sync legt die geplanten Lauf- und Radeinheiten der nächsten 7 Tage als Workouts in Garmin Connect an
+(Name beginnt mit „Plan · “) und trägt sie in den Kalender ein. Die Uhr holt sie beim nächsten Abgleich mit dem Handy.
+Ändert sich eine Einheit in der App, wird sie beim nächsten Sync ersetzt; übersprungene und alte Einheiten werden wieder entfernt.
+Eigene Workouts ohne den Präfix bleiben unberührt. Abschalten: Repo-Variable `WATCH_DAYS` = `0`.
 
 ### 5. Aufs Handy
 `https://pietswelt.github.io/TrainingsAPP/` öffnen, einloggen, dann

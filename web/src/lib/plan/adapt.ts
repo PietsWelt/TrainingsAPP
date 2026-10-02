@@ -5,7 +5,7 @@ import { sportGroup } from '../format'
 import type { Activity } from '../types'
 import { addDays, mondayOf, WEEKDAY_LONG, weekday } from './dates'
 import type { Readiness } from '../readiness'
-import type { PlanWorkout } from './types'
+import type { Feedback, PlanWorkout } from './types'
 
 export interface Change {
   changed: PlanWorkout[]
@@ -47,15 +47,24 @@ export function skipWorkout(all: PlanWorkout[], id: string, today: string): Chan
   )
   if (skippedThisWeek.length === 2 && !target) {
     const next = plan.filter((x) => x.date >= nextMonday && x.date < addDays(nextMonday, 7) && x.status === 'planned' && x.sport !== 'race')
-    for (const x of next)
-      changed.push({
-        ...x,
-        distance_km: x.distance_km != null ? Math.round(x.distance_km * 0.9 * 10) / 10 : null,
-        duration_min: x.duration_min != null ? Math.round((x.duration_min * 0.9) / 5) * 5 : null,
-      })
+    for (const x of next) changed.push(scaleWorkout(x, 0.9))
     if (next.length) message += ' Zwei Ausfälle diese Woche: Die nächste Woche ist 10 % leichter.'
   }
   return { changed, message }
+}
+
+/**
+ * Ändert den Umfang einer Einheit. Der harte Kern (Intervalle, Tempoblöcke) bleibt gleich,
+ * bei Läufen ohne Wiederholungen wird der lockere erste Abschnitt angepasst.
+ */
+export function scaleWorkout(w: PlanWorkout, f: number): PlanWorkout {
+  const distance_km = w.distance_km != null ? Math.round(w.distance_km * f * 10) / 10 : null
+  let steps = w.steps
+  if (steps?.length && !steps.some((s) => s.type === 'repeat')) {
+    const [first, ...rest] = steps
+    if (first.type !== 'repeat' && first.m) steps = [{ ...first, m: Math.max(1000, Math.round((first.m * f) / 100) * 100) }, ...rest]
+  }
+  return { ...w, distance_km, duration_min: w.duration_min != null ? Math.round((w.duration_min * f) / 5) * 5 : null, steps }
 }
 
 export function findSlot(plan: PlanWorkout[], w: PlanWorkout, today: string, raceDate?: string): string | null {
@@ -144,6 +153,7 @@ const snapshot = (w: PlanWorkout): NonNullable<PlanWorkout['original']> => ({
   distance_km: w.distance_km,
   key_session: w.key_session,
   status: w.status,
+  steps: w.steps ?? null,
 })
 
 /**
@@ -168,6 +178,7 @@ export function readinessProposal(all: PlanWorkout[], today: string, r: Readines
     duration_min: mins,
     distance_km: w.distance_km != null ? Math.round(w.distance_km * 0.6 * 10) / 10 : null,
     key_session: false,
+    steps: null,
     original: snapshot(w),
   }
   options.push({ id: 'easy', label: 'Locker statt hart', changed: [easy], message: `${w.title} heute durch ${mins} min locker ersetzt.` })
@@ -207,4 +218,51 @@ export function readinessProposal(all: PlanWorkout[], today: string, r: Readines
 export function restoreOriginal(w: PlanWorkout): PlanWorkout {
   if (!w.original) return w
   return { ...w, ...w.original, original: null }
+}
+
+// ---------- Rückmeldung nach der Einheit ----------
+
+export const FEEDBACK_LABEL = { easy: 'Zu leicht', ok: 'Passend', hard: 'Zu hart' } as const
+
+/**
+ * Speichert die Einschätzung zu einer Einheit. Zweimal hintereinander „zu hart“ macht die nächsten
+ * 7 Tage 10 % leichter, zweimal „zu leicht“ die lockeren und langen Einheiten 5 % länger.
+ * Einzelne Ausreißer ändern nichts. Tapering und Rennen bleiben unangetastet.
+ */
+export function giveFeedback(all: PlanWorkout[], id: string, feedback: Feedback | null, today: string): Change {
+  const w = all.find((x) => x.id === id)
+  if (!w) return { changed: [], message: '' }
+  const rated: PlanWorkout = { ...w, feedback }
+  const changed: PlanWorkout[] = [rated]
+  if (!feedback || feedback === 'ok' || feedback === w.feedback) return { changed, message: 'Danke, notiert.' }
+
+  // Bewertete Einheiten dieses Plans bis einschließlich dieser, neueste zuerst.
+  const history = all
+    .filter((x) => x.event_id === w.event_id && x.id !== w.id && x.feedback && x.date <= w.date)
+    .concat(rated)
+    .sort((a, b) => b.date.localeCompare(a.date) || Number(b.id === w.id) - Number(a.id === w.id))
+  let streak = 0
+  for (const x of history) {
+    if (x.feedback !== feedback) break
+    streak++
+  }
+  if (streak < 2 || streak % 2 !== 0) return { changed, message: 'Danke, notiert. Kommt das öfter vor, passe ich den Plan an.' }
+
+  const until = addDays(today, 7)
+  const next = all.filter(
+    (x) => x.event_id === w.event_id && x.date > today && x.date <= until && x.status === 'planned' && x.sport !== 'race' && x.phase !== 'taper',
+  )
+  if (feedback === 'hard') {
+    for (const x of next) changed.push(scaleWorkout(x, 0.9))
+    return {
+      changed,
+      message: next.length ? 'Zweimal hintereinander zu hart: Die nächsten 7 Tage sind 10 % leichter.' : 'Notiert. Die nächsten Tage sind schon locker genug.',
+    }
+  }
+  const longer = next.filter((x) => x.kind === 'easy' || x.kind === 'long' || x.kind === 'recovery')
+  for (const x of longer) changed.push(scaleWorkout(x, 1.05))
+  return {
+    changed,
+    message: longer.length ? 'Zweimal hintereinander zu leicht: Lockere und lange Einheiten der nächsten 7 Tage sind 5 % länger.' : 'Notiert.',
+  }
 }

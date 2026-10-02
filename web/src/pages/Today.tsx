@@ -13,6 +13,7 @@ import { useMemo } from 'react'
 import { readinessFor } from '../lib/readiness'
 import type { DailyLogState } from '../lib/useDailyLog'
 import { AlcoholCard, ProposalCard, ReadinessCard } from './TodayReadiness'
+import { FeedbackCard } from './PlanFeedback'
 
 function garminStatus(score: number): { status: Status; text: string } {
   if (score >= 75) return { status: 'good', text: 'Bereit für Belastung' }
@@ -47,6 +48,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
       {own && <ReadinessCard r={own} garmin={readiness} />}
       <ProposalCard plan={plan} r={own} today={today} />
       <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
+      <FeedbackCard plan={plan} today={today} />
       {!own && readiness != null && (
         <Card>
           <div className="flex items-center gap-4">

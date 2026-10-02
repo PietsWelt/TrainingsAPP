@@ -2,7 +2,7 @@
 // ~8 % Steigerung pro Woche, jede 4. Woche Entlastung, ca. 80 % locker / 20 % intensiv.
 
 import { addDays, daysBetween, mondayOf } from './dates'
-import { isTri, type EventType, type Fitness, type Kind, type Phase, type PlanWorkout, type RaceEvent, type RunEventType, type Sport, type TriEventType } from './types'
+import { isTri, type EventType, type RepeatStep, type Step, type WorkStep, type Fitness, type Kind, type Phase, type PlanWorkout, type RaceEvent, type RunEventType, type Sport, type TriEventType } from './types'
 
 interface RunSpec {
   km: number
@@ -151,6 +151,7 @@ interface Draft {
   duration_min: number | null
   distance_km: number | null
   key_session: boolean
+  steps?: Step[]
 }
 
 const r1 = (x: number) => Math.round(x * 10) / 10
@@ -161,53 +162,139 @@ function runMinutes(km: number, p: Paces | null, factor = 1): number {
   return Math.round((km * pace * factor) / 60 / 5) * 5
 }
 
+// Bausteine für die Uhr
+const WU: WorkStep = { type: 'warmup', time_s: 12 * 60, note: 'Locker einlaufen' }
+const CD: WorkStep = { type: 'cooldown', time_s: 10 * 60, note: 'Locker auslaufen' }
+const work = (x: Omit<WorkStep, 'type'>): WorkStep => ({ type: 'run', ...x })
+const jog = (x: Omit<WorkStep, 'type'>): WorkStep => ({ type: 'recover', note: 'Traben', ...x })
+const repeat = (times: number, ...steps: WorkStep[]): RepeatStep => ({ type: 'repeat', times, steps })
+const pz = (z: Exclude<Zone, 'easy'>, p: Paces | null) => (p ? Math.round(p[z]) : undefined)
+
 function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null): Draft {
   const short = type === '5k' || type === '10k'
   const base = { sport: 'run' as Sport, distance_km: r1(km), duration_min: runMinutes(km, p, 0.92), key_session: true }
   const wu = 'Ein- und Auslaufen je 10–15 min locker.'
+  const strides = (n: number): Draft => ({
+    ...base,
+    kind: 'strides',
+    key_session: false,
+    title: 'Lockerer Lauf mit Steigerungen',
+    description: `Locker (${at('easy', p)}), am Ende ${n} × 20 s Steigerungen.`,
+    steps: [work({ m: Math.max(1000, Math.round((km - 0.5) * 10) * 100), note: 'Locker' }), repeat(n, work({ time_s: 20, note: 'Steigerung' }), jog({ time_s: 60 })), CD],
+  })
   if (phase === 'base') {
-    if (slot === 'Q1')
-      return { ...base, kind: 'fartlek', title: 'Fahrtspiel', description: `${6 + Math.min(pw, 4)} × 1 min zügig (${at('threshold', p)}) / 1 min locker. ${wu}` }
-    return { ...base, kind: 'strides', key_session: false, title: 'Lockerer Lauf mit Steigerungen', description: `Locker (${at('easy', p)}), am Ende 6 × 20 s Steigerungen.` }
+    if (slot === 'Q1') {
+      const n = 6 + Math.min(pw, 4)
+      return {
+        ...base,
+        kind: 'fartlek',
+        title: 'Fahrtspiel',
+        description: `${n} × 1 min zügig (${at('threshold', p)}) / 1 min locker. ${wu}`,
+        steps: [WU, repeat(n, work({ time_s: 60, pace: pz('threshold', p), note: 'Zügig' }), jog({ time_s: 60 })), CD],
+      }
+    }
+    return strides(6)
   }
   if (phase === 'build') {
     if (slot === 'Q1') {
       const reps = Math.min(4, 2 + Math.floor(pw / 2))
       const len = short ? 8 : 10 + (pw % 2) * 2
-      return { ...base, kind: 'tempo', title: 'Schwellenlauf', description: `${reps} × ${len} min @ ${at('threshold', p)}, 2 min Trabpause. ${wu}` }
+      return {
+        ...base,
+        kind: 'tempo',
+        title: 'Schwellenlauf',
+        description: `${reps} × ${len} min @ ${at('threshold', p)}, 2 min Trabpause. ${wu}`,
+        steps: [WU, repeat(reps, work({ time_s: len * 60, pace: pz('threshold', p), note: 'Schwelle' }), jog({ time_s: 120 })), CD],
+      }
     }
-    if (short)
-      return { ...base, kind: 'intervals', title: 'Intervalle', description: `${5 + Math.min(pw, 3)} × 800 m @ ${at('interval', p)}, 400 m Trabpause. ${wu}` }
-    if (type === 'half')
-      return { ...base, kind: 'intervals', title: 'Intervalle', description: `${4 + Math.min(pw, 2)} × 1 km @ ${at('interval', p)}, 2 min Trabpause. ${wu}` }
-    return { ...base, kind: 'race_pace', title: 'Marathontempo', description: `${8 + 2 * Math.min(pw, 4)} km @ ${at('marathon', p)}. ${wu}` }
+    if (short) {
+      const n = 5 + Math.min(pw, 3)
+      return {
+        ...base,
+        kind: 'intervals',
+        title: 'Intervalle',
+        description: `${n} × 800 m @ ${at('interval', p)}, 400 m Trabpause. ${wu}`,
+        steps: [WU, repeat(n, work({ m: 800, pace: pz('interval', p) }), jog({ m: 400 })), CD],
+      }
+    }
+    if (type === 'half') {
+      const n = 4 + Math.min(pw, 2)
+      return {
+        ...base,
+        kind: 'intervals',
+        title: 'Intervalle',
+        description: `${n} × 1 km @ ${at('interval', p)}, 2 min Trabpause. ${wu}`,
+        steps: [WU, repeat(n, work({ m: 1000, pace: pz('interval', p) }), jog({ time_s: 120 })), CD],
+      }
+    }
+    const mk = 8 + 2 * Math.min(pw, 4)
+    return {
+      ...base,
+      kind: 'race_pace',
+      title: 'Marathontempo',
+      description: `${mk} km @ ${at('marathon', p)}. ${wu}`,
+      steps: [WU, work({ m: mk * 1000, pace: pz('marathon', p), note: 'Marathontempo' }), CD],
+    }
   }
   if (phase === 'peak') {
     if (slot === 'Q1') {
-      const d: Record<RunEventType, string> = {
-        '5k': '6 × 1 km @ RACE, 2 min Trabpause.',
-        '10k': '4 × 2 km @ RACE, 2 min Trabpause.',
-        half: pw === 0 ? '2 × 5 km @ RACE, 3 min Trabpause.' : '3 × 4 km @ RACE, 2 min Trabpause.',
-        marathon: `${12 + 2 * Math.min(pw, 2)} km @ RACE am Stück.`,
+      const blocks: Record<RunEventType, [number, number, number]> = {
+        '5k': [6, 1000, 120],
+        '10k': [4, 2000, 120],
+        half: pw === 0 ? [2, 5000, 180] : [3, 4000, 120],
+        marathon: [1, (12 + 2 * Math.min(pw, 2)) * 1000, 0],
       }
-      return { ...base, kind: 'race_pace', title: 'Wettkampftempo', description: `${d[type].replace('RACE', at('race', p))} ${wu}` }
+      const [n, m, pause] = blocks[type]
+      const text = n === 1 ? `${m / 1000} km @ RACE am Stück.` : `${n} × ${m / 1000} km @ RACE, ${pause / 60} min Trabpause.`
+      const steps: Step[] =
+        n === 1
+          ? [WU, work({ m, pace: pz('race', p), note: 'Wettkampftempo' }), CD]
+          : [WU, repeat(n, work({ m, pace: pz('race', p), note: 'Wettkampftempo' }), jog({ time_s: pause })), CD]
+      return { ...base, kind: 'race_pace', title: 'Wettkampftempo', description: `${text.replace('RACE', at('race', p))} ${wu}`, steps }
     }
     if (short)
-      return { ...base, kind: 'intervals', title: 'Kurze Intervalle', description: `8 × 400 m schnell (schneller als ${at('interval', p)}), 200 m Trabpause. ${wu}` }
-    return { ...base, kind: 'tempo', title: 'Schwellenlauf', description: `3 × 10 min @ ${at('threshold', p)}, 2 min Trabpause. ${wu}` }
+      return {
+        ...base,
+        kind: 'intervals',
+        title: 'Kurze Intervalle',
+        description: `8 × 400 m schnell (schneller als ${at('interval', p)}), 200 m Trabpause. ${wu}`,
+        steps: [WU, repeat(8, work({ m: 400, pace: p ? Math.round(p.interval - 8) : undefined, note: 'Schnell' }), jog({ m: 200 })), CD],
+      }
+    return {
+      ...base,
+      kind: 'tempo',
+      title: 'Schwellenlauf',
+      description: `3 × 10 min @ ${at('threshold', p)}, 2 min Trabpause. ${wu}`,
+      steps: [WU, repeat(3, work({ time_s: 600, pace: pz('threshold', p), note: 'Schwelle' }), jog({ time_s: 120 })), CD],
+    }
   }
   // taper
   if (slot === 'Q1')
-    return { ...base, kind: 'race_pace', title: 'Kurz und knackig', description: `4 × 1 km @ ${at('race', p)}, 2 min Trabpause. ${wu}` }
-  return { ...base, kind: 'strides', key_session: false, title: 'Lockerer Lauf mit Steigerungen', description: `Locker (${at('easy', p)}), am Ende 4 × 20 s Steigerungen.` }
+    return {
+      ...base,
+      kind: 'race_pace',
+      title: 'Kurz und knackig',
+      description: `4 × 1 km @ ${at('race', p)}, 2 min Trabpause. ${wu}`,
+      steps: [WU, repeat(4, work({ m: 1000, pace: pz('race', p), note: 'Wettkampftempo' }), jog({ time_s: 120 })), CD],
+    }
+  return strides(4)
 }
 
 function runLong(type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null): Draft {
   let description = `Ruhig und gleichmäßig (${at('easy', p)}).`
+  let steps: Step[] | undefined
+  const total = Math.round(km * 10) * 100
   if (phase === 'build' && type !== '5k') description += ' Die letzten 2 km etwas zügiger.'
-  if (phase === 'peak' && type === 'marathon') description = `Ruhig beginnen, die letzten ${6 + 2 * Math.min(pw, 2)} km im ${at('marathon', p)}.`
-  if (phase === 'peak' && type === 'half') description = `Ruhig beginnen, die letzten 4 km im ${at('race', p)}.`
-  return { sport: 'run', kind: 'long', title: 'Langer Lauf', description, distance_km: r1(km), duration_min: runMinutes(km, p, 1.03), key_session: true }
+  if (phase === 'peak' && type === 'marathon') {
+    const fast = 6 + 2 * Math.min(pw, 2)
+    description = `Ruhig beginnen, die letzten ${fast} km im ${at('marathon', p)}.`
+    steps = [work({ m: Math.max(1000, total - fast * 1000), note: 'Ruhig' }), work({ m: fast * 1000, pace: pz('marathon', p), note: 'Marathontempo' })]
+  }
+  if (phase === 'peak' && type === 'half') {
+    description = `Ruhig beginnen, die letzten 4 km im ${at('race', p)}.`
+    steps = [work({ m: Math.max(1000, total - 4000), note: 'Ruhig' }), work({ m: 4000, pace: pz('race', p), note: 'Wettkampftempo' })]
+  }
+  return { sport: 'run', kind: 'long', title: 'Langer Lauf', description, distance_km: r1(km), duration_min: runMinutes(km, p, 1.03), key_session: true, steps }
 }
 
 function runEasy(km: number, p: Paces | null, recovery = false): Draft {
@@ -289,7 +376,7 @@ function triWeek(type: TriEventType, phase: Phase, pw: number, hours: number, ro
     ),
   )
   const rqd = runQuality('Q1', TRI[type].runLike, phase, pw, 8, null)
-  m.set('RQ', d('run', rqd.kind, `Laufen: ${rqd.title}`, rqd.description, run * rq, rqd.key_session))
+  m.set('RQ', { ...d('run', rqd.kind, `Laufen: ${rqd.title}`, rqd.description, run * rq, rqd.key_session), steps: rqd.kind === 'strides' ? undefined : rqd.steps })
   m.set('RL', d('run', 'long', 'Langer Lauf', 'Ruhig und gleichmäßig (Zone 2).', run * rl, true))
   m.set('RE', d('run', 'easy', 'Lockerer Lauf', 'Locker (Zone 2).', run * re, false))
   return m
@@ -318,6 +405,7 @@ function raceWeek(event: RaceEvent, p: Paces | null): [number, Draft][] {
     duration_min: 40,
     distance_km: null,
     key_session: true,
+    steps: [{ ...WU, time_s: 15 * 60 }, repeat(3, work({ m: 1000, pace: pz('race', p), note: 'Wettkampftempo' }), jog({ time_s: 120 })), CD],
   }
   if (tri) {
     out.push([-5, easy(30, 'swim')])

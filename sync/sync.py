@@ -20,11 +20,14 @@ from garminconnect import Garmin
 
 from db import Supabase
 from mapping import activity_row, daily_row
+from watch import push_workouts
 
 log = logging.getLogger("sync")
 
 BACKFILL_DAYS = int(os.getenv("BACKFILL_DAYS", "120"))
 RECENT_DAYS = int(os.getenv("RECENT_DAYS", "3"))
+# Wie viele Tage im Voraus Einheiten auf die Uhr gehen (0 = aus).
+WATCH_DAYS = int(os.getenv("WATCH_DAYS", "7"))
 
 
 def garmin_client(db: Supabase) -> Garmin:
@@ -109,6 +112,9 @@ def main() -> int:
         today = date.today()
         n_act = sync_activities(client, db, today)
         n_days = sync_days(client, db, days_to_sync(db, today))
+        watch = safe(lambda: push_workouts(client, db, today, WATCH_DAYS), "Workouts auf die Uhr")
+        if watch:
+            log.info("Uhr: %s", watch)
         db.update(
             "sync_runs",
             {"id": run["id"]},
