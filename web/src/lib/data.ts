@@ -19,22 +19,35 @@ export async function loadDataset(days = 180): Promise<Dataset> {
     supabase.from('daily_metrics').select(DAY_COLS).gte('date', since).order('date'),
     supabase.from('sync_runs').select(RUN_COLS).order('started_at', { ascending: false }).limit(1),
     loadBests(),
-    // Spalten und Tabelle aus Migration 0008; fehlen sie, bleibt es bei leeren Werten.
-    supabase.from('activities').select('id,decoupling_pct').gte('local_date', since).not('decoupling_pct', 'is', null),
+    loadExtras(since),
     supabase.from('race_predictions').select('date,time_5k,time_10k,time_half,time_marathon').gte('date', since).order('date'),
     supabase.from('garmin_races').select('id,name,date,distance_m,sport').order('date'),
   ])
   const err = a.error ?? d.error ?? s.error
   if (err) throw new Error(err.message)
-  const driftById = new Map(((drift.error ? [] : drift.data) as { id: number; decoupling_pct: number }[]).map((x) => [x.id, x.decoupling_pct]))
+  const extras = new Map(drift.map((x) => [x.id, x]))
   return {
-    activities: (a.data as Activity[]).map((x) => (driftById.has(x.id) ? { ...x, decoupling_pct: driftById.get(x.id) } : x)),
+    activities: (a.data as Activity[]).map((x) => (extras.has(x.id) ? { ...x, ...extras.get(x.id) } : x)),
     days: d.data as DailyMetrics[],
     lastSync: (s.data?.[0] as SyncRun) ?? null,
     records,
     predictions: predictions.error ? [] : (predictions.data as RacePrediction[]),
     garminRaces: races.error ? [] : (races.data as GarminRace[]),
   }
+}
+
+type Extra = Pick<Activity, 'id' | 'decoupling_pct' | 'temp_c' | 'dew_point_c' | 'gap_factor'>
+
+/**
+ * Werte aus späteren Migrationen (0008 Drift, 0011 Wetter und Steigung). Fehlen die Spalten noch,
+ * geht es mit weniger weiter, statt die ganze App zu blockieren.
+ */
+async function loadExtras(since: string): Promise<Extra[]> {
+  const sb = supabase!
+  const full = await sb.from('activities').select('id,decoupling_pct,temp_c,dew_point_c,gap_factor').gte('local_date', since).or('decoupling_pct.not.is.null,temp_c.not.is.null,gap_factor.not.is.null')
+  if (!full.error) return full.data as Extra[]
+  const drift = await sb.from('activities').select('id,decoupling_pct').gte('local_date', since).not('decoupling_pct', 'is', null)
+  return drift.error ? [] : (drift.data as Extra[])
 }
 
 /** Bestzeiten über die ganze gesyncte Historie, nicht nur die geladenen 180 Tage. Fehler sind nie fatal. */

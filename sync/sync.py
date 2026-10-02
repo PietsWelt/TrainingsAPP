@@ -18,7 +18,8 @@ from typing import Any, Callable
 from garminconnect import Garmin
 
 from db import Supabase
-from mapping import activity_row, daily_row, decoupling, pr_row, prediction_row, race_row
+from mapping import activity_row, daily_row, decoupling, gap_factor, pr_row, prediction_row, race_row
+from weather import weather_at
 from watch import push_workouts
 
 log = logging.getLogger("sync")
@@ -114,26 +115,61 @@ def sync_records(client: Garmin, db: Supabase) -> int:
 DRIFT_PER_RUN = int(os.getenv("DRIFT_PER_RUN", "15"))
 
 
+SPLITS_V = 2  # 1 = nur Puls-Drift, 2 = zusätzlich Steigung
+
+
 def sync_drift(client: Garmin, db: Supabase) -> int:
-    """Puls-Drift für Läufe ab 40 Minuten, die noch nicht ausgewertet sind (neueste zuerst, gedrosselt)."""
+    """Puls-Drift (ab 30 min) und Steigungsbereinigung aus den Runden, neueste Läufe zuerst, gedrosselt."""
     runs = db.select(
         "activities",
         {
             "select": "id",
-            "splits_checked": "is.false",
+            "splits_v": f"lt.{SPLITS_V}",
             "sport": "like.*running*",
-            "duration_s": "gte.2400",
+            "duration_s": "gte.600",
             "order": "start_time.desc",
             "limit": str(DRIFT_PER_RUN),
         },
     )
     for r in runs:
-        splits = safe(lambda: client.get_activity_splits(r["id"]), f"Runden {r['id']}")
+        splits = safe(lambda: client.get_activity_splits(r["id"]), "Runden")
         if splits is None:
             continue  # beim nächsten Sync erneut versuchen
-        value = decoupling(splits.get("lapDTOs") or [])
-        db.update("activities", {"id": r["id"]}, {"decoupling_pct": value, "splits_checked": True})
+        laps = splits.get("lapDTOs") or []
+        db.update(
+            "activities",
+            {"id": r["id"]},
+            {"decoupling_pct": decoupling(laps), "gap_factor": gap_factor(laps), "splits_checked": True, "splits_v": SPLITS_V},
+        )
     return len(runs)
+
+
+WEATHER_PER_RUN = int(os.getenv("WEATHER_PER_RUN", "25"))
+
+
+def sync_weather(db: Supabase, today: date) -> int:
+    """Temperatur und Taupunkt am Startort für Läufe und Radfahrten, die noch keins haben."""
+    acts = db.select(
+        "activities",
+        {
+            "select": "id,start_time,duration_s,lat:raw->startLatitude,lon:raw->startLongitude",
+            "weather_checked": "is.false",
+            "or": "(sport.like.*running*,sport.like.*cycling*,sport.like.*biking*)",
+            "order": "start_time.desc",
+            "limit": str(WEATHER_PER_RUN),
+        },
+    )
+    done = 0
+    for a in acts:
+        try:
+            temp, dew = weather_at(a.get("lat"), a.get("lon"), a["start_time"], a.get("duration_s"), today)
+        except Exception as e:  # noqa: BLE001
+            # Nur den Fehlertyp loggen; beim nächsten Sync erneut versuchen.
+            log.warning("Wetter fehlgeschlagen: %s", type(e).__name__)
+            break
+        db.update("activities", {"id": a["id"]}, {"temp_c": temp, "dew_point_c": dew, "weather_checked": True})
+        done += 1
+    return done
 
 
 def sync_prediction(client: Garmin, db: Supabase, today: date) -> bool:
@@ -179,9 +215,12 @@ def main() -> int:
         now = datetime.now(timezone.utc)
         if now.hour % 2 == 0 and now.minute < 30 or os.getenv("RACES_ALWAYS"):
             safe(lambda: sync_races(client, db, today), "Rennen aus dem Kalender")
-        drift = safe(lambda: sync_drift(client, db), "Puls-Drift")
+        drift = safe(lambda: sync_drift(client, db), "Runden-Auswertung")
         if drift:
-            log.info("Puls-Drift: %d Läufe ausgewertet", drift)
+            log.info("Runden: %d Läufe ausgewertet", drift)
+        weather = safe(lambda: sync_weather(db, today), "Wetter")
+        if weather:
+            log.info("Wetter: %d Aktivitäten ergänzt", weather)
         watch = safe(lambda: push_workouts(client, db, today, WATCH_DAYS), "Workouts auf die Uhr")
         if watch:
             log.info("Uhr: %s", watch)

@@ -3,6 +3,7 @@ import { sportGroup } from '../format'
 // gegen das Ziel der Einheit. Daraus folgt „zu leicht / passend / zu hart“ und eine kleine
 // Anpassung der Zieltempos künftiger Einheiten derselben Art.
 
+import { heatPct, HOT_PCT } from '../heat'
 import type { Activity } from '../types'
 import { fmtPace } from './generate'
 import type { Feedback, Kind, PlanWorkout, Step, WorkStep } from './types'
@@ -32,7 +33,31 @@ export function zonesPlausible(a: Activity): boolean {
   return !(total > 40 * 60 && (z[4] ?? 0) / total > 0.4)
 }
 
+/** Ab diesem Steigungsfaktor (3 % mehr Aufwand als flach) gilt ein Lauf als hügelig. */
+export const HILLY = 1.03
+
+/**
+ * Hitze und Hügel treiben den Puls bei gleichem Tempo nach oben. Dann ist „zu hart“ kein
+ * Zeichen für zu schnelle Zieltempos: Die Tempos bleiben, die Begründung sagt warum.
+ */
+function forConditions(r: Analysis | null, a: Activity): Analysis | null {
+  if (!r || r.verdict !== 'hard') return r
+  const heat = heatPct(a.temp_c, a.dew_point_c)
+  const hilly = (a.gap_factor ?? 1) >= HILLY
+  if (heat < HOT_PCT && !hilly) return r
+  const why = [
+    heat >= HOT_PCT && `${Math.round(a.temp_c!)} °C bei Taupunkt ${Math.round(a.dew_point_c!)} °C (etwa ${heat.toLocaleString('de-DE')} % langsamer bei gleicher Anstrengung)`,
+    hilly && `hügelige Strecke (etwa ${Math.round(((a.gap_factor ?? 1) - 1) * 100)} % mehr Aufwand als flach)`,
+  ].filter(Boolean)
+  const note = `Wegen ${why.join(' und ')} war ein höherer Puls zu erwarten. Die Zieltempos bleiben deshalb gleich.`
+  return r.group === 'easy' ? { ...r, verdict: 'ok', reasons: [...r.reasons, note], paceShift: 0 } : { ...r, reasons: [...r.reasons, note], paceShift: 0 }
+}
+
 export function analyzeRun(w: PlanWorkout, a: Activity): Analysis | null {
+  return forConditions(rawAnalysis(w, a), a)
+}
+
+function rawAnalysis(w: PlanWorkout, a: Activity): Analysis | null {
   if (w.sport !== 'run') return null
   const z = (a.hr_zones_s ?? []).map((x) => x ?? 0)
   const total = z.reduce((s, x) => s + x, 0)

@@ -86,6 +86,12 @@ export function demoDataset(): Dataset {
         rpe: isRun ? (hard ? 80 : 40) : null,
         decoupling_pct: isRun && !hard && dur > 2400 ? Math.round((7 - fitness * 4 + (r() - 0.5) * 4) * 10) / 10 : null,
       })
+      // Wetter und Steigung ohne weitere Zufallszahlen, damit die übrigen Beispielwerte gleich bleiben.
+      const last = activities[activities.length - 1]
+      const season = Math.sin(((parseInt(date.slice(5, 7)) - 4) / 12) * 2 * Math.PI)
+      last.temp_c = Math.round((13 + 10 * season + (last.id % 7) - 3) * 10) / 10
+      last.dew_point_c = Math.round((last.temp_c - 7 + (last.id % 4)) * 10) / 10
+      if (isRun) last.gap_factor = Math.round((1 + ((last.elevation_gain_m ?? 0) / distM) * 3) * 1000) / 1000
     }
   }
 

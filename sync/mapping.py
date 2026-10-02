@@ -201,3 +201,38 @@ def _type_key(v: Any) -> str | None:
     if isinstance(v, dict):
         v = v.get("typeKey") or v.get("key")
     return str(v) if v else None
+
+
+def _minetti(i: float) -> float:
+    """Energiekosten des Laufens in J/kg/m bei Steigung i (0.1 = 10 %), Minetti et al. 2002."""
+    return 155.4 * i**5 - 30.4 * i**4 - 43.3 * i**3 + 46.3 * i**2 + 19.5 * i + 3.6
+
+
+# Bergab spart man laut Labor bis zu 40 % Energie, im echten Lauf aber deutlich weniger
+# (Bremsen, Technik). Darum wird der Vorteil bergab auf 12 % begrenzt.
+DOWNHILL_FLOOR = 0.88
+
+
+def gap_factor(laps: list[dict[str, Any]]) -> float | None:
+    """Steigungsbereinigung aus den Kilometer-Runden: flache Ersatzstrecke geteilt durch echte Strecke.
+
+    Pro Runde sind nur Anstieg und Abstieg bekannt. Angenommen wird: Der Anstieg verteilt sich auf
+    den Anteil Anstieg/(Anstieg+Abstieg) der Runde, der Rest geht entsprechend bergab.
+    """
+    flat = dist = 0.0
+    for lap in laps:
+        d = float(lap.get("distance") or 0)
+        if d < 100:
+            continue
+        up, down = float(lap.get("elevationGain") or 0), float(lap.get("elevationLoss") or 0)
+        f = 1.0
+        if up + down > 0:
+            g = min((up + down) / d, 0.3)
+            share = up / (up + down)
+            c0 = _minetti(0)
+            f = share * _minetti(g) / c0 + (1 - share) * max(_minetti(-g) / c0, DOWNHILL_FLOOR)
+        flat += d * f
+        dist += d
+    if dist < 1000:
+        return None
+    return round(flat / dist, 3)
