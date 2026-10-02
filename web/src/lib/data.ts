@@ -9,13 +9,15 @@ const ACTIVITY_COLS =
 const DAY_COLS =
   'date,sleep_s,deep_sleep_s,light_sleep_s,rem_sleep_s,awake_s,sleep_score,hrv_last_night,hrv_weekly_avg,hrv_status,hrv_baseline_low,hrv_baseline_high,resting_hr,steps,body_battery_high,body_battery_low,stress_avg,training_readiness,vo2max_running'
 
+const RUN_COLS = 'id,trigger,started_at,finished_at,status,message'
+
 export async function loadDataset(days = 180): Promise<Dataset> {
   if (!supabase) return demoDataset()
   const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10)
   const [a, d, s, records, drift, predictions, races] = await Promise.all([
     supabase.from('activities').select(ACTIVITY_COLS).gte('local_date', since).order('start_time', { ascending: false }),
     supabase.from('daily_metrics').select(DAY_COLS).gte('date', since).order('date'),
-    supabase.from('sync_runs').select('*').order('started_at', { ascending: false }).limit(1),
+    supabase.from('sync_runs').select(RUN_COLS).order('started_at', { ascending: false }).limit(1),
     loadBests(),
     // Spalten und Tabelle aus Migration 0008; fehlen sie, bleibt es bei leeren Werten.
     supabase.from('activities').select('id,decoupling_pct').gte('local_date', since).not('decoupling_pct', 'is', null),
@@ -39,24 +41,28 @@ export async function loadDataset(days = 180): Promise<Dataset> {
 async function loadBests(): Promise<Best[]> {
   if (!supabase) return []
   const sb = supabase
-  const runs = DISTANCES.filter((x) => x.key !== '1k').map((x) =>
+  // Eine Abfrage für alle Strecken statt einer je Strecke; das Fenster prüft bestsFromActivities.
+  const lengths = DISTANCES.filter((x) => x.key !== '1k').map((x) => x.meters)
+  const [pr, runs] = await Promise.all([
+    sb.from('personal_records').select('type_id,value,activity_id,date'),
     sb
       .from('activities')
       .select('id,sport,local_date,distance_m,duration_s')
       .like('sport', '%running%')
-      .gte('distance_m', x.meters * WINDOW[0])
-      .lte('distance_m', x.meters * WINDOW[1])
-      .order('duration_s')
-      .limit(5),
-  )
+      .gte('distance_m', Math.min(...lengths) * WINDOW[0])
+      .lte('distance_m', Math.max(...lengths) * WINDOW[1])
+      .order('local_date', { ascending: false })
+      .limit(1000),
+  ])
   // Tabelle fehlt, solange Migration 0007 nicht gelaufen ist: dann nur die Läufe.
-  const [pr, ...lists] = await Promise.all([sb.from('personal_records').select('type_id,value,activity_id,date'), ...runs])
-  const acts = lists.flatMap((l) => (l.data ?? []) as Activity[])
+  const acts = (runs.data ?? []) as Activity[]
   return mergeBests((pr.error ? [] : pr.data) as GarminRecord[], bestsFromActivities(acts), acts)
 }
 
-async function latestRun(): Promise<SyncRun | null> {
-  const { data } = await supabase!.from('sync_runs').select('*').order('id', { ascending: false }).limit(1)
+/** Nur der letzte Sync-Lauf: eine kleine Abfrage, um zu sehen, ob es Neues gibt. */
+export async function latestRun(): Promise<SyncRun | null> {
+  if (!supabase) return null
+  const { data } = await supabase!.from('sync_runs').select(RUN_COLS).order('id', { ascending: false }).limit(1)
   return (data?.[0] as SyncRun) ?? null
 }
 

@@ -38,16 +38,19 @@ function friendly(e: unknown): string {
   return msg
 }
 
-export function usePlan(activities: Activity[] | undefined): PlanState {
+/** `day` ändert sich beim ersten Öffnen an einem neuen Tag, damit Verpasstes auch ohne neue Daten nachgezogen wird. */
+export function usePlan(activities: Activity[] | undefined, day = localToday()): PlanState {
   const [events, setEvents] = useState<RaceEvent[]>([])
   const [workouts, setWorkouts] = useState<PlanWorkout[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
+    // Ohne Aktivitäten nichts rechnen: sonst läuft alles doppelt, einmal davon mit leerer Fitness.
+    if (!activities) return
     try {
       const [ev, ws] = await Promise.all([planStore.listEvents(), planStore.listWorkouts()])
-      const today = localToday()
+      const today = day
       const done = activities ? autoComplete(ws, activities, today) : []
       // Ablauf für die Uhr bei älteren Plänen nachtragen (Plan ab heute neu berechnen, nur Abläufe übernehmen).
       const filled = hasColumn('steps')
@@ -96,7 +99,7 @@ export function usePlan(activities: Activity[] | undefined): PlanState {
     } finally {
       setLoading(false)
     }
-  }, [activities])
+  }, [activities, day])
 
   useEffect(() => {
     void reload()

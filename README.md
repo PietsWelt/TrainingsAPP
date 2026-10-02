@@ -22,7 +22,7 @@ Garmin Connect ──(python-garminconnect, alle 30 min + Knopf)──► GitHub
 
 ### 1. Supabase
 1. Auf [supabase.com](https://supabase.com) kostenloses Projekt anlegen (Region Frankfurt).
-2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql`, `0004_feedback_watch.sql`, `0005_gym.sql`, `0006_sync_cron.sql`, `0007_personal_records.sql` und `0008_drift_prognose.sql` einfügen, jeweils **Run**. In `0006_sync_cron.sql` vorher die zwei Platzhalter ersetzen (steht oben in der Datei); sie startet den Sync alle 30 Minuten.
+2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql`, `0004_feedback_watch.sql`, `0005_gym.sql`, `0006_sync_cron.sql`, `0007_personal_records.sql`, `0008_drift_prognose.sql`, `0009_garmin_races.sql` und `0010_sicherheit.sql` einfügen, jeweils **Run**. In `0006_sync_cron.sql` vorher die zwei Platzhalter ersetzen (steht oben in der Datei); sie startet den Sync alle 30 Minuten. `0010_sicherheit.sql` erlaubt Lesen und Schreiben nur dem ersten angelegten Nutzer (Schritt 3 also vorher erledigen und danach erneut ausführen, falls nötig).
 3. **Authentication → Users → Add user**: deine E-Mail und ein Passwort (das ist der App-Login, nicht Garmin).
 4. **Authentication → Sign In / Providers**: „Allow new users to sign up“ **ausschalten**. Damit bist du der einzige Nutzer.
 5. **Project Settings → API**: `Project URL` (z.B. `https://xxxx.supabase.co`, ohne `/rest/v1`), `anon`-Key und `service_role`-Key notieren.
@@ -51,7 +51,8 @@ Danach den Codespace löschen. Anschließend unter **Actions → Garmin Sync →
 ### 4. „Jetzt synchronisieren“-Knopf (optional)
 1. GitHub: **Settings → Developer settings → Fine-grained tokens**, Zugriff nur auf dieses Repo, Berechtigung **Actions: Read and write**.
 2. Supabase: **Edge Functions → Deploy a new function → via Editor**, Name `trigger-sync`, Inhalt aus `supabase/functions/trigger-sync/index.ts`.
-3. Supabase: **Edge Functions → Secrets**: `GITHUB_TOKEN` (Token von oben), `GITHUB_REPO` = `PietsWelt/TrainingsAPP`.
+3. Supabase: **Edge Functions → Secrets**: `GITHUB_TOKEN` (Token von oben), `GITHUB_REPO` = `PietsWelt/TrainingsAPP`. Läuft die App nicht unter `https://pietswelt.github.io`, zusätzlich `ALLOWED_ORIGIN` mit der eigenen Adresse.
+4. Die Funktion startet den Sync nur für dich (eingeloggt) oder für den Zeitplan aus `0010_sicherheit.sql`. Deshalb `0010` vor der Funktion ausführen.
 
 ### Workouts auf der Uhr
 Der Sync legt die geplanten Lauf- und Radeinheiten der nächsten 7 Tage als Workouts in Garmin Connect an

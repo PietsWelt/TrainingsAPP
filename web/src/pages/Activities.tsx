@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MobilityButton } from './Mobility'
-import { ZoneBar } from '../components/charts'
+import { ZoneBar } from '../components/ZoneBar'
 import { Sheet } from '../components/Sheet'
 import { Card, Segmented, SportIcon } from '../components/ui'
 import { dateLabel, duration, hoursMin, km, speed, sportGroup, sportLabel, weekStart, type SportGroup } from '../lib/format'
