@@ -6,11 +6,13 @@ import { supabase } from './lib/supabase'
 import type { Dataset } from './lib/types'
 import { Activities, ActivityDetail } from './pages/Activities'
 import { Login } from './pages/Login'
+import { Plan } from './pages/Plan'
+import { usePlan } from './lib/plan/usePlan'
 import { Today } from './pages/Today'
 import { Trends } from './pages/Trends'
 
-type Tab = 'today' | 'trends' | 'activities'
-const TITLES: Record<Tab, string> = { today: 'Heute', trends: 'Trends', activities: 'Aktivitäten' }
+type Tab = 'today' | 'plan' | 'trends' | 'activities'
+const TITLES: Record<Tab, string> = { today: 'Heute', plan: 'Plan', trends: 'Trends', activities: 'Aktivitäten' }
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(supabase ? undefined : null)
@@ -34,6 +36,7 @@ function Main() {
   const [syncing, setSyncing] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [openId, setOpenId] = useState<number | null>(null)
+  const plan = usePlan(data?.activities)
 
   const refresh = useCallback(() => {
     loadDataset()
@@ -95,14 +98,16 @@ function Main() {
         )}
         {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
         {!data && !error && <div className="p-10 text-center text-sm text-ink-3">Lade Daten …</div>}
-        {data && tab === 'today' && <Today data={data} onOpenActivity={setOpenId} />}
+        {data && tab === 'today' && <Today data={data} plan={plan} onOpenActivity={setOpenId} onOpenPlan={() => setTab('plan')} />}
+        {data && tab === 'plan' && <Plan plan={plan} />}
         {data && tab === 'trends' && <Trends data={data} />}
         {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="mx-auto grid max-w-xl grid-cols-3">
+        <div className="mx-auto grid max-w-xl grid-cols-4">
           <NavButton active={tab === 'today'} onClick={() => setTab('today')} label="Heute" icon={<path d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4-1.4 1.4M7 17l-1.4 1.4m12.8 0L17 17M7 7 5.6 5.6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />} />
+          <NavButton active={tab === 'plan'} onClick={() => setTab('plan')} label="Plan" icon={<path d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 9 2 2 4-4" />} />
           <NavButton active={tab === 'trends'} onClick={() => setTab('trends')} label="Trends" icon={<path d="M3 17l5-5 4 4 8-8m0 0h-5m5 0v5" />} />
           <NavButton active={tab === 'activities'} onClick={() => setTab('activities')} label="Aktivitäten" icon={<path d="M4 6h16M4 12h16M4 18h10" />} />
         </div>
