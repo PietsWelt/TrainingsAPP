@@ -45,7 +45,8 @@ export function phasesFor(weeks: number, taper: number): Phase[] {
   return [...Array(base).fill('base'), ...Array(build).fill('build'), ...Array(peak).fill('peak'), ...Array(t).fill('taper')]
 }
 
-const TAPER_FACTORS: Record<number, number[]> = { 1: [0.55], 2: [0.75, 0.5], 3: [0.8, 0.65, 0.5] }
+// Tapering: Umfang insgesamt um gut 40 % senken, Intensität und Häufigkeit halten (Bosquet et al. 2007).
+const TAPER_FACTORS: Record<number, number[]> = { 1: [0.55], 2: [0.65, 0.5], 3: [0.75, 0.6, 0.45] }
 
 /** Wochenumfang je Woche (km oder Stunden). */
 export function volumesFor(phases: Phase[], start: number, peak: number): number[] {
@@ -79,11 +80,15 @@ export interface Paces {
   easy: [number, number]
 }
 
-/** Abgeleitet aus der Zielzeit über die Riegel-Formel (T2 = T1 · (D2/D1)^1.06). */
+/**
+ * Abgeleitet aus der Zielzeit über die Riegel-Formel (T2 = T1 · (D2/D1)^k). Für längere Strecken
+ * k = 1,08 statt 1,06: Riegel schätzt Hobbyläufer auf langen Strecken zu schnell
+ * (Vickers & Vertosick 2016), sonst würden Marathon- und Grundlagentempo zu schnell.
+ */
 export function pacesFor(type: EventType, goalS: number | null): Paces | null {
   if (!goalS || isTri(type)) return null
   const d = RUN[type].km
-  const pace = (km: number) => (goalS * Math.pow(km / d, 1.06)) / km
+  const pace = (km: number) => (goalS * Math.pow(km / d, km > d ? 1.08 : 1.06)) / km
   const m = pace(42.195)
   return {
     race: goalS / d,

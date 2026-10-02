@@ -2,12 +2,13 @@
 // Jeder Baustein wird gegen deine eigene Norm der letzten 4 Wochen bewertet, nicht gegen Tabellenwerte.
 
 import { addDays } from './plan/dates'
+import type { GymByDate } from './dailyLog'
 import type { Activity, DailyMetrics } from './types'
 
 export type ReadinessStatus = 'good' | 'warning' | 'serious' | 'critical'
 
 export interface Component {
-  key: 'hrv' | 'rhr' | 'sleep' | 'load' | 'alcohol'
+  key: 'hrv' | 'rhr' | 'sleep' | 'load' | 'alcohol' | 'legs'
   label: string
   score: number // 0..100
   weight: number
@@ -23,7 +24,7 @@ export interface Readiness {
   components: Component[]
 }
 
-const WEIGHTS: Record<Component['key'], number> = { hrv: 0.3, sleep: 0.25, load: 0.2, rhr: 0.15, alcohol: 0.1 }
+const WEIGHTS: Record<Component['key'], number> = { hrv: 0.3, sleep: 0.25, load: 0.2, rhr: 0.15, alcohol: 0.1, legs: 0.1 }
 
 const clamp = (x: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, x))
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
@@ -40,6 +41,21 @@ export function alcoholScore(drinks: number): number {
   return [100, 85, 65, 45, 30][Math.min(drinks, 4)] - Math.max(0, drinks - 4) * 10
 }
 
+const LEG_FOCUS = new Set(['legs', 'full'])
+
+/** Müdigkeit der Beine durch Krafttraining gestern oder vorgestern (null, wenn keins). */
+export function legFatigue(date: string, gym: GymByDate): { score: number; detail: string; daysAgo: number; hard: boolean } | null {
+  for (const daysAgo of [1, 2]) {
+    const g = gym[addDays(date, -daysAgo)]
+    if (!g || !LEG_FOCUS.has(g.focus)) continue
+    const what = g.focus === 'legs' ? 'Beine' : 'Ganzkörper'
+    const when = daysAgo === 1 ? 'Gestern' : 'Vorgestern'
+    if (daysAgo === 1) return { score: g.hard ? 45 : 70, detail: `${when} ${what}${g.hard ? ', hart' : ', locker'}`, daysAgo, hard: g.hard }
+    if (g.hard) return { score: 70, detail: `${when} ${what}, hart`, daysAgo, hard: true }
+  }
+  return null
+}
+
 /** Trainingslast eines Tages; ohne Garmin-Wert grob aus der Dauer geschätzt. */
 function loadOf(a: Activity): number {
   if (a.training_load != null) return a.training_load
@@ -51,6 +67,7 @@ export function readinessFor(
   days: DailyMetrics[],
   activities: Activity[],
   drinksByDate: Record<string, number>,
+  gymByDate: GymByDate = {},
 ): Readiness | null {
   const byDate = new Map(days.map((d) => [d.date, d]))
   const today = byDate.get(date)
@@ -137,6 +154,10 @@ export function readinessFor(
     })
   }
 
+  // Beintraining macht die Beine für 24–48 h müde; Oberkörper und Core zählen nicht.
+  const legs = legFatigue(date, gymByDate)
+  if (legs) comps.push({ key: 'legs', label: 'Beine vom Krafttraining', score: legs.score, weight: WEIGHTS.legs, detail: legs.detail })
+
   // Ohne HRV und Schlaf ist der Wert nicht aussagekräftig.
   if (!comps.some((c) => c.key === 'hrv' || c.key === 'sleep')) return null
 
@@ -163,6 +184,6 @@ export function readinessFor(
 }
 
 /** Readiness für jeden Tag der Liste (für den Verlauf in Trends). */
-export function readinessSeries(days: DailyMetrics[], activities: Activity[], drinksByDate: Record<string, number>) {
-  return days.map((d) => ({ date: d.date, value: readinessFor(d.date, days, activities, drinksByDate)?.score ?? null }))
+export function readinessSeries(days: DailyMetrics[], activities: Activity[], drinksByDate: Record<string, number>, gymByDate: GymByDate = {}) {
+  return days.map((d) => ({ date: d.date, value: readinessFor(d.date, days, activities, drinksByDate, gymByDate)?.score ?? null }))
 }

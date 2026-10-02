@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Card, StatusLabel } from '../components/ui'
 import { tap } from '../lib/haptics'
-import { readinessProposal } from '../lib/plan/adapt'
+import { legsProposal, readinessProposal } from '../lib/plan/adapt'
 import { addDays } from '../lib/plan/dates'
 import type { PlanState } from '../lib/plan/usePlan'
-import type { Readiness } from '../lib/readiness'
+import { legFatigue, type Readiness } from '../lib/readiness'
+import type { GymFocus } from '../lib/dailyLog'
+import { WEEKDAY_LONG, weekday } from '../lib/plan/dates'
 import { toast } from '../lib/toast'
 import type { DailyLogState } from '../lib/useDailyLog'
 
@@ -68,7 +70,7 @@ function Ring({ value }: { value: number }) {
 
 const DISMISS_KEY = 'readiness.dismissed'
 
-export function ProposalCard({ plan, r, today }: { plan: PlanState; r: Readiness | null; today: string }) {
+export function ProposalCard({ plan, r, today, log }: { plan: PlanState; r: Readiness | null; today: string; log: DailyLogState }) {
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(DISMISS_KEY) === today
@@ -77,7 +79,7 @@ export function ProposalCard({ plan, r, today }: { plan: PlanState; r: Readiness
     }
   })
   const [busy, setBusy] = useState(false)
-  const p = readinessProposal(plan.workouts, today, r)
+  const p = readinessProposal(plan.workouts, today, r) ?? legsProposal(plan.workouts, today, legFatigue(today, log.gym))
   if (!p || dismissed) return null
 
   async function choose(changed: Parameters<PlanState['applyChanges']>[0], message: string) {
@@ -174,6 +176,90 @@ export function AlcoholCard({ log, today }: { log: DailyLogState; today: string 
           </div>
         ))}
       </div>
+    </Card>
+  )
+}
+
+const FOCUS: { id: GymFocus; label: string }[] = [
+  { id: 'legs', label: 'Beine' },
+  { id: 'upper', label: 'Oberkörper' },
+  { id: 'full', label: 'Ganzkörper' },
+  { id: 'core', label: 'Core' },
+]
+
+/** Krafttraining heute oder gestern: Schwerpunkt und ob es hart war. */
+export function GymCard({ log, plan, today, strengthToday }: { log: DailyLogState; plan: PlanState; today: string; strengthToday: boolean }) {
+  const rows = [
+    { date: today, label: 'Heute' },
+    { date: addDays(today, -1), label: 'Gestern' },
+  ]
+  async function set(date: string, focus: GymFocus | null, hard?: boolean) {
+    tap()
+    const cur = log.gym[date]
+    try {
+      if (focus == null || (cur?.focus === focus && hard === undefined)) await log.setGym(date, null)
+      else await log.setGym(date, { focus, hard: hard ?? cur?.hard ?? true })
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
+  // Nächste harte Einheit ab morgen, für den Tipp zur Platzierung von Beintraining.
+  const nextKey = plan.workouts.find((w) => w.date > today && w.key_session && w.status === 'planned' && w.sport !== 'race')
+  const legsToday = log.gym[today] && (log.gym[today].focus === 'legs' || log.gym[today].focus === 'full')
+  return (
+    <Card title="Krafttraining" subtitle="Beine wirken sich auf die nächsten Läufe aus, Oberkörper kaum">
+      {strengthToday && !log.gym[today] && <p className="mb-2 text-xs text-accent">Garmin hat heute Krafttraining erkannt. Was hast du trainiert?</p>}
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const cur = log.gym[row.date]
+          return (
+            <div key={row.date}>
+              <div className="mb-1.5 text-sm font-medium">{row.label}</div>
+              <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label={`Krafttraining ${row.label}`}>
+                {FOCUS.map((f) => {
+                  const on = cur?.focus === f.id
+                  return (
+                    <button
+                      key={f.id}
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => set(row.date, f.id)}
+                      className={`min-h-11 rounded-xl px-1 text-sm font-semibold ${on ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}
+                    >
+                      {f.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {cur && (
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5" role="radiogroup" aria-label={`Intensität ${row.label}`}>
+                  {[false, true].map((hard) => (
+                    <button
+                      key={String(hard)}
+                      role="radio"
+                      aria-checked={cur.hard === hard}
+                      onClick={() => set(row.date, cur.focus, hard)}
+                      className={`min-h-10 rounded-xl text-sm font-medium ${cur.hard === hard ? 'bg-ink text-surface' : 'bg-surface-2 text-ink-2'}`}
+                    >
+                      {hard ? 'Hart' : 'Locker'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {legsToday && nextKey && (
+        <p className="mt-3 text-xs text-ink-2">
+          {nextKey.date === addDays(today, 1)
+            ? `Morgen steht ${nextKey.title} an. Mit müden Beinen schlägt dir die App morgen locker oder verschieben vor.`
+            : `Nächste harte Einheit: ${nextKey.title} am ${WEEKDAY_LONG[weekday(nextKey.date)]}. Genug Abstand für die Beine.`}
+        </p>
+      )}
+      {!legsToday && nextKey && (
+        <p className="mt-3 text-xs text-ink-3">Tipp: Beine am besten am Tag einer harten Laufeinheit, ein paar Stunden danach. Oder mit 2 Tagen Abstand zur nächsten.</p>
+      )}
     </Card>
   )
 }

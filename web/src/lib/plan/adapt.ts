@@ -162,6 +162,22 @@ const snapshot = (w: PlanWorkout): NonNullable<PlanWorkout['original']> => ({
  */
 export function readinessProposal(all: PlanWorkout[], today: string, r: Readiness | null): ReadinessProposal | null {
   if (!r || (r.status !== 'serious' && r.status !== 'critical')) return null
+  return proposalFor(all, today, `niedriger Readiness (${r.score})`, `Deine Readiness ist heute niedrig (${r.score}). Wie willst du die Einheit angehen?`, r.status === 'critical')
+}
+
+/**
+ * Nach Beintraining sind die Beine 24–48 h müde und laufen unökonomischer. Steht dann eine
+ * harte Laufeinheit an, gibt es dieselben Optionen wie bei niedriger Readiness.
+ */
+export function legsProposal(all: PlanWorkout[], today: string, legs: { daysAgo: number; hard: boolean } | null): ReadinessProposal | null {
+  if (!legs || (legs.daysAgo === 2 && !legs.hard)) return null
+  const w = all.find((x) => x.date === today && x.status === 'planned' && x.key_session && x.sport !== 'race' && !x.original)
+  if (!w) return null
+  const when = legs.daysAgo === 1 ? 'Gestern' : 'Vorgestern'
+  return proposalFor(all, today, 'Beintraining', `${when} Beine trainiert: Das kann harte Einheiten noch 1–2 Tage schwerer machen, ${w.title} bringt dann weniger. Wie willst du die Einheit angehen?`, false)
+}
+
+function proposalFor(all: PlanWorkout[], today: string, cause: string, reason: string, critical: boolean): ReadinessProposal | null {
   const w = all.find((x) => x.date === today && x.status === 'planned' && x.key_session && x.sport !== 'race' && !x.original)
   if (!w) return null
 
@@ -174,7 +190,7 @@ export function readinessProposal(all: PlanWorkout[], today: string, r: Readines
     ...w,
     kind: 'easy',
     title: w.sport === 'run' ? 'Lockerer Lauf (angepasst)' : `${w.title.split(':')[0]}: locker (angepasst)`,
-    description: `Angepasst wegen niedriger Readiness (${r.score}). Ganz locker im Gesprächstempo, Zone 1–2. Ursprünglich: ${w.title}.`,
+    description: `Angepasst wegen ${cause}. Ganz locker im Gesprächstempo, Zone 1–2. Ursprünglich: ${w.title}.`,
     duration_min: mins,
     distance_km: w.distance_km != null ? Math.round(w.distance_km * 0.6 * 10) / 10 : null,
     key_session: false,
@@ -198,7 +214,7 @@ export function readinessProposal(all: PlanWorkout[], today: string, r: Readines
     }
   }
 
-  if (r.status === 'critical') {
+  if (critical) {
     options.push({
       id: 'rest',
       label: 'Ruhetag',
@@ -207,11 +223,7 @@ export function readinessProposal(all: PlanWorkout[], today: string, r: Readines
     })
   }
 
-  return {
-    workout: w,
-    reason: `Deine Readiness ist heute niedrig (${r.score}). Wie willst du die Einheit angehen?`,
-    options: r.status === 'critical' ? [...options].sort((a) => (a.id === 'rest' ? -1 : 0)) : options,
-  }
+  return { workout: w, reason, options: critical ? [...options].sort((a) => (a.id === 'rest' ? -1 : 0)) : options }
 }
 
 /** Stellt eine wegen Readiness angepasste Einheit wieder her. */

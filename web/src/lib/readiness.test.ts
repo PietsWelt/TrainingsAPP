@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addDays } from './plan/dates'
-import { alcoholScore, readinessFor } from './readiness'
+import { alcoholScore, readinessFor, legFatigue } from './readiness'
 import type { Activity, DailyMetrics } from './types'
 
 const D = '2026-10-02'
@@ -77,5 +77,15 @@ describe('alcoholScore', () => {
   it('decreases with each drink', () => {
     const s = [0, 1, 2, 3, 4, 6].map(alcoholScore)
     for (let i = 1; i < s.length; i++) expect(s[i]).toBeLessThan(s[i - 1])
+  })
+})
+
+describe('legFatigue', () => {
+  it('counts hard leg or full-body training for 48 h and ignores upper body', () => {
+    expect(legFatigue('2026-10-05', { '2026-10-04': { focus: 'legs', hard: true } })).toMatchObject({ score: 45, daysAgo: 1 })
+    expect(legFatigue('2026-10-05', { '2026-10-04': { focus: 'full', hard: false } })).toMatchObject({ score: 70 })
+    expect(legFatigue('2026-10-05', { '2026-10-03': { focus: 'legs', hard: true } })).toMatchObject({ score: 70, daysAgo: 2 })
+    expect(legFatigue('2026-10-05', { '2026-10-03': { focus: 'legs', hard: false } })).toBeNull()
+    expect(legFatigue('2026-10-05', { '2026-10-04': { focus: 'upper', hard: true } })).toBeNull()
   })
 })

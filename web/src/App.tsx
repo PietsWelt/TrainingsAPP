@@ -109,7 +109,7 @@ function Main() {
         {!data && !error && <SkeletonPage />}
         {data && tab === 'today' && <Today data={data} plan={plan} log={log} onOpenActivity={setOpenId} onOpenPlan={() => selectTab('plan')} />}
         {data && tab === 'plan' && <Plan plan={plan} activities={data.activities} />}
-        {data && tab === 'trends' && <Trends data={data} drinks={log.drinks} />}
+        {data && tab === 'trends' && <Trends data={data} drinks={log.drinks} gym={log.gym} />}
         {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
       </main>
 

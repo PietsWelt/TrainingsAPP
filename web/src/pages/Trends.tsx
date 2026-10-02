@@ -3,7 +3,7 @@ import { HrvChart, SimpleLineChart, SleepChart, WeeklyDistanceChart, WeeklyDrink
 import { Card, Segmented } from '../components/ui'
 import { lastDays, weeklyTotals } from '../lib/derive'
 import { avg, hoursMin } from '../lib/format'
-import type { DrinksByDate } from '../lib/dailyLog'
+import type { DrinksByDate, GymByDate } from '../lib/dailyLog'
 import { addDays } from '../lib/plan/dates'
 import { readinessSeries } from '../lib/readiness'
 import type { Dataset } from '../lib/types'
@@ -11,7 +11,7 @@ import type { Dataset } from '../lib/types'
 type Range = '4w' | '3m' | '6m'
 const RANGE_DAYS: Record<Range, number> = { '4w': 28, '3m': 91, '6m': 182 }
 
-export function Trends({ data, drinks }: { data: Dataset; drinks: DrinksByDate }) {
+export function Trends({ data, drinks, gym }: { data: Dataset; drinks: DrinksByDate; gym?: GymByDate }) {
   const [range, setRange] = useState<Range>('3m')
   const n = RANGE_DAYS[range]
   const days = lastDays(data.days, n)
@@ -21,7 +21,7 @@ export function Trends({ data, drinks }: { data: Dataset; drinks: DrinksByDate }
   const avgHrv = avg(days.map((d) => d.hrv_last_night))
   const avgRhr = avg(days.map((d) => d.resting_hr))
   const avgKm = avg(weeks.slice(0, -1).map((w) => w.km))
-  const allReadiness = useMemo(() => readinessSeries(data.days, data.activities, drinks), [data, drinks])
+  const allReadiness = useMemo(() => readinessSeries(data.days, data.activities, drinks, gym), [data, drinks, gym])
   const readiness = allReadiness.slice(-n)
   const avgReady = avg(readiness.map((d) => d.value))
   const drinkWeeks = weeks.map((w) => ({ week: w.week, drinks: [0, 1, 2, 3, 4, 5, 6].reduce((s, i) => s + (drinks[addDays(w.week, i)] ?? 0), 0) }))
