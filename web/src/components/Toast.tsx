@@ -6,7 +6,7 @@ export function Toaster() {
   useEffect(() => subscribe(setList), [])
   if (!list.length) return null
   return (
-    <div className="pointer-events-none fixed inset-x-0 z-40 flex flex-col items-center gap-2 px-4" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 76px)' }} aria-live="polite">
+    <div className="pointer-events-none fixed inset-x-0 z-40 flex flex-col items-center gap-2 px-4" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 88px)' }} aria-live="polite">
       {list.map((t) => (
         <button
           key={t.id}

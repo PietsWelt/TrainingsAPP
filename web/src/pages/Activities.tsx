@@ -79,6 +79,7 @@ export function ActivityDetail({ activity: a, onClose }: { activity: Activity; o
     ['Trainingslast', a.training_load != null ? String(Math.round(a.training_load)) : '–'],
     ['Aerober Effekt', a.aerobic_te != null ? a.aerobic_te.toFixed(1).replace('.', ',') : '–'],
     ['Anaerober Effekt', a.anaerobic_te != null ? a.anaerobic_te.toFixed(1).replace('.', ',') : '–'],
+    ...(a.decoupling_pct != null ? ([['Puls-Drift', `${a.decoupling_pct.toLocaleString('de-DE')} % ${a.decoupling_pct <= 5 ? '(stabil)' : '(hoch)'}`]] as [string, string][]) : []),
     ['Kalorien', a.calories != null ? `${Math.round(a.calories)} kcal` : '–'],
   ]
   return (

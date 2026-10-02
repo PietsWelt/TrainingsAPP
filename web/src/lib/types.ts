@@ -20,6 +20,8 @@ export interface Activity {
   hr_zones_s: (number | null)[] | null
   /** Anstrengung, die du nach dem Lauf auf der Uhr eingibst (Garmin speichert 10–100). */
   rpe?: number | null
+  /** Puls-Drift: Effizienzverlust der 2. gegenüber der 1. Hälfte in % (aus den Runden). */
+  decoupling_pct?: number | null
 }
 
 export interface DailyMetrics {
@@ -59,4 +61,14 @@ export interface Dataset {
   lastSync: SyncRun | null
   /** Bestzeiten je Strecke (siehe records.ts). */
   records?: Best[]
+  /** Garmins Rennzeit-Prognose pro Tag (Sekunden). */
+  predictions?: RacePrediction[]
+}
+
+export interface RacePrediction {
+  date: string
+  time_5k: number | null
+  time_10k: number | null
+  time_half: number | null
+  time_marathon: number | null
 }

@@ -81,3 +81,33 @@ def test_pr_row():
     row = pr_row({"typeId": 3, "value": 1385.2, "activityId": 9, "prStartTimeGmtFormatted": "2026-05-03T07:12:00.0"})
     assert row["type_id"] == 3 and row["value"] == 1385.2 and row["date"] == "2026-05-03"
     assert pr_row({"value": 1}) is None
+
+
+def test_decoupling_steady_is_zero():
+    from mapping import decoupling
+
+    laps = [{"duration": 300, "distance": 1000, "averageHR": 140} for _ in range(10)]
+    assert decoupling(laps) == 0.0
+
+
+def test_decoupling_rising_hr():
+    from mapping import decoupling
+
+    laps = [{"duration": 300, "distance": 1000, "averageHR": 140 + i * 2} for i in range(10)]
+    v = decoupling(laps)
+    assert v is not None and 4 < v < 10
+
+
+def test_decoupling_too_short():
+    from mapping import decoupling
+
+    assert decoupling([{"duration": 300, "distance": 1000, "averageHR": 140}] * 3) is None
+
+
+def test_prediction_row():
+    from mapping import prediction_row
+
+    row = prediction_row("2026-10-02", {"time5K": 1250.4, "time10K": 2600, "timeHalfMarathon": 5800, "timeMarathon": 12300})
+    assert row == {"date": "2026-10-02", "time_5k": 1250, "time_10k": 2600, "time_half": 5800, "time_marathon": 12300}
+    assert prediction_row("2026-10-02", {}) is None
+    assert prediction_row("2026-10-02", [{"time5K": 1300}])["time_5k"] == 1300
