@@ -32,6 +32,7 @@ function Main() {
   const [data, setData] = useState<Dataset | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const [openId, setOpenId] = useState<number | null>(null)
 
   const refresh = useCallback(() => {
@@ -54,6 +55,7 @@ function Main() {
 
   async function syncNow() {
     setSyncing(true)
+    setNotice(null)
     try {
       await triggerSync()
       // Der Sync läuft in GitHub Actions; ein paar Mal nachladen, bis neue Daten da sind.
@@ -62,7 +64,7 @@ function Main() {
         refresh()
       }
     } catch (e) {
-      setError((e as Error).message)
+      setNotice((e as Error).message)
     } finally {
       setSyncing(false)
     }
@@ -84,6 +86,13 @@ function Main() {
       </header>
 
       <main className="px-4 pt-2" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 84px)' }}>
+        {notice && (
+          <div className="mb-3 flex items-start gap-3 rounded-xl border border-line bg-surface p-3 text-sm text-ink-2">
+            <span style={{ color: 'var(--warning)' }} aria-hidden>▲</span>
+            <span className="flex-1">{notice}</span>
+            <button onClick={() => setNotice(null)} className="text-ink-3" aria-label="Hinweis schließen">✕</button>
+          </div>
+        )}
         {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
         {!data && !error && <div className="p-10 text-center text-sm text-ink-3">Lade Daten …</div>}
         {data && tab === 'today' && <Today data={data} onOpenActivity={setOpenId} />}
