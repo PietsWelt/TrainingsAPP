@@ -34,7 +34,19 @@ export async function triggerSync(): Promise<void> {
     throw new Error(
       missing
         ? 'Der Sync-Knopf ist noch nicht eingerichtet (README, Schritt 4). Der automatische Sync alle 30 Minuten läuft trotzdem.'
-        : `Sync konnte nicht gestartet werden: ${error.message}`,
+        : `Sync konnte nicht gestartet werden: ${await errorDetail(error)}`,
     )
   }
+}
+
+/** Die Edge Function liefert {"error": "..."}; das ist aussagekräftiger als die Standardmeldung. */
+async function errorDetail(error: Error): Promise<string> {
+  const res = (error as { context?: Response }).context
+  try {
+    const body = res ? await res.clone().json() : null
+    if (body?.error) return `${body.error} (HTTP ${res?.status})`
+  } catch {
+    // Antwort war kein JSON
+  }
+  return res?.status ? `${error.message} (HTTP ${res.status})` : error.message
 }
