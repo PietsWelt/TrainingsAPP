@@ -1,0 +1,48 @@
+name: Garmin Sync
+
+on:
+  schedule:
+    # Alle 30 Minuten von 6 bis 23:30 Uhr deutscher Sommerzeit (Zeiten in UTC).
+    - cron: "*/30 4-21 * * *"
+  workflow_dispatch:
+    inputs:
+      trigger:
+        description: "Auslöser (manual = Knopf in der App)"
+        default: manual
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: garmin-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sync/requirements.txt
+      - run: pip install -r sync/requirements.txt
+      - name: Sync
+        working-directory: sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+          SYNC_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger || 'schedule' }}
+        run: python sync.py
+      # GitHub schaltet Zeitpläne in öffentlichen Repos nach 60 Tagen ohne Commits ab.
+      # Das erneute Aktivieren setzt diese Frist zurück.
+      - name: Zeitplan aktiv halten
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT repos/${{ github.repository }}/actions/workflows/sync.yml/enable
