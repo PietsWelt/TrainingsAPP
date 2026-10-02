@@ -1,0 +1,137 @@
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { loadDataset, triggerSync } from './lib/data'
+import { relativeTime } from './lib/format'
+import { supabase } from './lib/supabase'
+import type { Dataset } from './lib/types'
+import { Activities, ActivityDetail } from './pages/Activities'
+import { Login } from './pages/Login'
+import { Today } from './pages/Today'
+import { Trends } from './pages/Trends'
+
+type Tab = 'today' | 'trends' | 'activities'
+const TITLES: Record<Tab, string> = { today: 'Heute', trends: 'Trends', activities: 'Aktivitäten' }
+
+export default function App() {
+  const [session, setSession] = useState<Session | null | undefined>(supabase ? undefined : null)
+
+  useEffect(() => {
+    if (!supabase) return
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    return () => data.subscription.unsubscribe()
+  }, [])
+
+  if (session === undefined) return null
+  if (supabase && !session) return <Login />
+  return <Main />
+}
+
+function Main() {
+  const [tab, setTab] = useState<Tab>('today')
+  const [data, setData] = useState<Dataset | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [openId, setOpenId] = useState<number | null>(null)
+
+  const refresh = useCallback(() => {
+    loadDataset()
+      .then((d) => {
+        setData(d)
+        setError(null)
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [])
+
+  useEffect(refresh, [refresh])
+
+  // Beim Zurückkehren in die App neu laden (z.B. nach einem Lauf).
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === 'visible' && refresh()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [refresh])
+
+  async function syncNow() {
+    setSyncing(true)
+    try {
+      await triggerSync()
+      // Der Sync läuft in GitHub Actions; ein paar Mal nachladen, bis neue Daten da sind.
+      for (const wait of [45, 45, 60]) {
+        await new Promise((r) => setTimeout(r, wait * 1000))
+        refresh()
+      }
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const opened = openId != null ? data?.activities.find((a) => a.id === openId) : undefined
+
+  return (
+    <div className="mx-auto min-h-dvh max-w-xl">
+      <header className="sticky top-0 z-10 bg-bg/90 px-4 pb-2 backdrop-blur" style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}>
+        <div className="flex items-end justify-between">
+          <h1 className="text-[28px] font-bold tracking-tight">{TITLES[tab]}</h1>
+          <button onClick={syncNow} disabled={syncing} className="mb-1 flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-2 disabled:opacity-70">
+            <SyncIcon spinning={syncing} />
+            {syncing ? 'Synchronisiere …' : 'Sync'}
+          </button>
+        </div>
+        <SyncStatus data={data} />
+      </header>
+
+      <main className="px-4 pt-2" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 84px)' }}>
+        {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
+        {!data && !error && <div className="p-10 text-center text-sm text-ink-3">Lade Daten …</div>}
+        {data && tab === 'today' && <Today data={data} onOpenActivity={setOpenId} />}
+        {data && tab === 'trends' && <Trends data={data} />}
+        {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
+      </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="mx-auto grid max-w-xl grid-cols-3">
+          <NavButton active={tab === 'today'} onClick={() => setTab('today')} label="Heute" icon={<path d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4-1.4 1.4M7 17l-1.4 1.4m12.8 0L17 17M7 7 5.6 5.6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />} />
+          <NavButton active={tab === 'trends'} onClick={() => setTab('trends')} label="Trends" icon={<path d="M3 17l5-5 4 4 8-8m0 0h-5m5 0v5" />} />
+          <NavButton active={tab === 'activities'} onClick={() => setTab('activities')} label="Aktivitäten" icon={<path d="M4 6h16M4 12h16M4 18h10" />} />
+        </div>
+      </nav>
+
+      {opened && <ActivityDetail activity={opened} onClose={() => setOpenId(null)} />}
+    </div>
+  )
+}
+
+function SyncStatus({ data }: { data: Dataset | null }) {
+  const s = data?.lastSync
+  if (!supabase) return <p className="text-xs text-ink-3">Demo-Modus mit Beispieldaten</p>
+  if (!s) return <p className="text-xs text-ink-3">Noch kein Sync gelaufen</p>
+  if (s.status === 'error')
+    return (
+      <p className="text-xs" style={{ color: 'var(--critical)' }}>
+        ■ Sync fehlgeschlagen {relativeTime(s.started_at)}
+      </p>
+    )
+  return <p className="text-xs text-ink-3">Garmin synchronisiert {relativeTime(s.finished_at ?? s.started_at)}</p>
+}
+
+function NavButton({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: ReactNode }) {
+  return (
+    <button onClick={onClick} className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${active ? 'text-accent' : 'text-ink-3'}`}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {icon}
+      </svg>
+      {label}
+    </button>
+  )
+}
+
+function SyncIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={spinning ? 'animate-spin' : ''}>
+      <path d="M21 12a9 9 0 1 1-3-6.7L21 8m0-5v5h-5" />
+    </svg>
+  )
+}

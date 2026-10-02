@@ -1,0 +1,31 @@
+import { demoDataset } from './demo'
+import { supabase } from './supabase'
+import type { Activity, Dataset, DailyMetrics, SyncRun } from './types'
+
+const ACTIVITY_COLS =
+  'id,start_time,local_date,sport,name,distance_m,duration_s,avg_hr,max_hr,avg_speed_mps,elevation_gain_m,avg_power_w,training_load,aerobic_te,anaerobic_te,calories,hr_zones_s'
+const DAY_COLS =
+  'date,sleep_s,deep_sleep_s,light_sleep_s,rem_sleep_s,awake_s,sleep_score,hrv_last_night,hrv_weekly_avg,hrv_status,hrv_baseline_low,hrv_baseline_high,resting_hr,steps,body_battery_high,body_battery_low,stress_avg,training_readiness,vo2max_running'
+
+export async function loadDataset(days = 180): Promise<Dataset> {
+  if (!supabase) return demoDataset()
+  const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10)
+  const [a, d, s] = await Promise.all([
+    supabase.from('activities').select(ACTIVITY_COLS).gte('local_date', since).order('start_time', { ascending: false }),
+    supabase.from('daily_metrics').select(DAY_COLS).gte('date', since).order('date'),
+    supabase.from('sync_runs').select('*').order('started_at', { ascending: false }).limit(1),
+  ])
+  const err = a.error ?? d.error ?? s.error
+  if (err) throw new Error(err.message)
+  return {
+    activities: a.data as Activity[],
+    days: d.data as DailyMetrics[],
+    lastSync: (s.data?.[0] as SyncRun) ?? null,
+  }
+}
+
+export async function triggerSync(): Promise<void> {
+  if (!supabase) return
+  const { error } = await supabase.functions.invoke('trigger-sync', { method: 'POST' })
+  if (error) throw new Error(error.message)
+}
