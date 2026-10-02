@@ -3,7 +3,7 @@ import { supabase } from './supabase'
 import type { Activity, Dataset, DailyMetrics, SyncRun } from './types'
 
 const ACTIVITY_COLS =
-  'id,start_time,local_date,sport,name,distance_m,duration_s,avg_hr,max_hr,avg_speed_mps,elevation_gain_m,avg_power_w,training_load,aerobic_te,anaerobic_te,calories,hr_zones_s'
+  'id,start_time,local_date,sport,name,distance_m,duration_s,avg_hr,max_hr,avg_speed_mps,elevation_gain_m,avg_power_w,training_load,aerobic_te,anaerobic_te,calories,hr_zones_s,rpe:raw->directWorkoutRpe'
 const DAY_COLS =
   'date,sleep_s,deep_sleep_s,light_sleep_s,rem_sleep_s,awake_s,sleep_score,hrv_last_night,hrv_weekly_avg,hrv_status,hrv_baseline_low,hrv_baseline_high,resting_hr,steps,body_battery_high,body_battery_low,stress_avg,training_readiness,vo2max_running'
 

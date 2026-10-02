@@ -82,6 +82,7 @@ export function demoDataset(): Dataset {
         anaerobic_te: Math.round((hard ? 2 + r() * 1.5 : r() * 0.8) * 10) / 10,
         calories: Math.round(dur / 60 * 11),
         hr_zones_s: zones.map((z) => Math.round(z * dur)),
+        rpe: isRun ? (hard ? 80 : 40) : null,
       })
     }
   }
