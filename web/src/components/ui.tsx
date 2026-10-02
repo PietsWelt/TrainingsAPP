@@ -45,12 +45,14 @@ export function StatusLabel({ status, children }: { status: Status; children: Re
 
 export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex rounded-xl bg-surface-2 p-1 text-sm">
+    <div className="flex w-full rounded-xl bg-surface-2 p-1 text-sm" role="tablist">
       {options.map((o) => (
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
-          className={`rounded-lg px-3 py-1.5 font-medium transition ${o.value === value ? 'bg-surface text-ink shadow-sm' : 'text-ink-2'}`}
+          role="tab"
+          aria-selected={o.value === value}
+          className={`min-h-9 flex-auto truncate rounded-lg px-2 font-medium ${o.value === value ? 'bg-surface text-ink shadow-sm' : 'text-ink-2'}`}
         >
           {o.label}
         </button>
