@@ -24,6 +24,28 @@ export async function loadDataset(days = 180): Promise<Dataset> {
   }
 }
 
+async function latestRun(): Promise<SyncRun | null> {
+  const { data } = await supabase!.from('sync_runs').select('*').order('id', { ascending: false }).limit(1)
+  return (data?.[0] as SyncRun) ?? null
+}
+
+/**
+ * Startet den Sync und wartet, bis der neue Lauf fertig ist. Ein Lauf dauert meist unter einer Minute;
+ * statt fester Wartezeiten wird alle paar Sekunden nachgesehen.
+ */
+export async function syncAndWait(): Promise<SyncRun | null> {
+  if (!supabase) return null
+  const before = (await latestRun())?.id ?? 0
+  await triggerSync()
+  const until = Date.now() + 5 * 60_000
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 4000))
+    const run = await latestRun()
+    if (run && run.id > before && run.status !== 'running') return run
+  }
+  return null
+}
+
 export async function triggerSync(): Promise<void> {
   if (!supabase) return
   const { error } = await supabase.functions.invoke('trigger-sync', { method: 'POST' })

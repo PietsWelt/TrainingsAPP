@@ -1,9 +1,8 @@
 name: Garmin Sync
 
 on:
-  schedule:
-    # Alle 30 Minuten von 6 bis 23:30 Uhr deutscher Sommerzeit (Zeiten in UTC).
-    - cron: "*/30 4-21 * * *"
+  # Der 30-Minuten-Takt kommt aus Supabase (pg_cron, Migration 0006_sync_cron.sql):
+  # GitHubs eigener Zeitplan lief bei diesem Repo nicht zuverlässig.
   workflow_dispatch:
     inputs:
       trigger:
@@ -12,7 +11,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 concurrency:
   group: garmin-sync
@@ -40,10 +38,3 @@ jobs:
           WATCH_DAYS: ${{ vars.WATCH_DAYS || '7' }}
           SYNC_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger || 'schedule' }}
         run: python sync.py
-      # GitHub schaltet Zeitpläne in öffentlichen Repos nach 60 Tagen ohne Commits ab.
-      # Das erneute Aktivieren setzt diese Frist zurück.
-      - name: Zeitplan aktiv halten
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT repos/${{ github.repository }}/actions/workflows/sync.yml/enable
