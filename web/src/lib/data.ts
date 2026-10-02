@@ -1,5 +1,6 @@
 import { demoDataset } from './demo'
 import { supabase } from './supabase'
+import { bestsFromActivities, DISTANCES, mergeBests, WINDOW, type Best, type GarminRecord } from './records'
 import type { Activity, Dataset, DailyMetrics, SyncRun } from './types'
 
 const ACTIVITY_COLS =
@@ -10,10 +11,11 @@ const DAY_COLS =
 export async function loadDataset(days = 180): Promise<Dataset> {
   if (!supabase) return demoDataset()
   const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10)
-  const [a, d, s] = await Promise.all([
+  const [a, d, s, records] = await Promise.all([
     supabase.from('activities').select(ACTIVITY_COLS).gte('local_date', since).order('start_time', { ascending: false }),
     supabase.from('daily_metrics').select(DAY_COLS).gte('date', since).order('date'),
     supabase.from('sync_runs').select('*').order('started_at', { ascending: false }).limit(1),
+    loadBests(),
   ])
   const err = a.error ?? d.error ?? s.error
   if (err) throw new Error(err.message)
@@ -21,7 +23,28 @@ export async function loadDataset(days = 180): Promise<Dataset> {
     activities: a.data as Activity[],
     days: d.data as DailyMetrics[],
     lastSync: (s.data?.[0] as SyncRun) ?? null,
+    records,
   }
+}
+
+/** Bestzeiten über die ganze gesyncte Historie, nicht nur die geladenen 180 Tage. Fehler sind nie fatal. */
+async function loadBests(): Promise<Best[]> {
+  if (!supabase) return []
+  const sb = supabase
+  const runs = DISTANCES.filter((x) => x.key !== '1k').map((x) =>
+    sb
+      .from('activities')
+      .select('id,sport,local_date,distance_m,duration_s')
+      .like('sport', '%running%')
+      .gte('distance_m', x.meters * WINDOW[0])
+      .lte('distance_m', x.meters * WINDOW[1])
+      .order('duration_s')
+      .limit(5),
+  )
+  // Tabelle fehlt, solange Migration 0007 nicht gelaufen ist: dann nur die Läufe.
+  const [pr, ...lists] = await Promise.all([sb.from('personal_records').select('type_id,value,activity_id,date'), ...runs])
+  const acts = lists.flatMap((l) => (l.data ?? []) as Activity[])
+  return mergeBests((pr.error ? [] : pr.data) as GarminRecord[], bestsFromActivities(acts))
 }
 
 async function latestRun(): Promise<SyncRun | null> {

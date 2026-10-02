@@ -1,3 +1,5 @@
+import type { Best } from './records'
+
 export interface Activity {
   id: number
   start_time: string
@@ -55,4 +57,6 @@ export interface Dataset {
   activities: Activity[]
   days: DailyMetrics[]
   lastSync: SyncRun | null
+  /** Bestzeiten je Strecke (siehe records.ts). */
+  records?: Best[]
 }

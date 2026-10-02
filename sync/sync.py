@@ -19,7 +19,7 @@ from typing import Any, Callable
 from garminconnect import Garmin
 
 from db import Supabase
-from mapping import activity_row, daily_row
+from mapping import activity_row, daily_row, pr_row
 from watch import push_workouts
 
 log = logging.getLogger("sync")
@@ -103,6 +103,14 @@ def sync_activities(client: Garmin, db: Supabase, today: date) -> int:
     return len(rows)
 
 
+def sync_records(client: Garmin, db: Supabase) -> int:
+    rows = [r for r in (pr_row(x) for x in client.get_personal_record() or []) if r]
+    # Nur Typ-IDs ins Log, keine Werte: die Logs des öffentlichen Repos sind für alle sichtbar.
+    log.info("Rekord-Typen: %s", sorted(r["type_id"] for r in rows))
+    db.upsert("personal_records", rows, "type_id")
+    return len(rows)
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     db = Supabase()
@@ -112,6 +120,7 @@ def main() -> int:
         today = date.today()
         n_act = sync_activities(client, db, today)
         n_days = sync_days(client, db, days_to_sync(db, today))
+        safe(lambda: sync_records(client, db), "Bestzeiten")
         watch = safe(lambda: push_workouts(client, db, today, WATCH_DAYS), "Workouts auf die Uhr")
         if watch:
             log.info("Uhr: %s", watch)

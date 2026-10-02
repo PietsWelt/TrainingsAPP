@@ -73,3 +73,11 @@ def test_auth_header_only_for_jwt_keys():
 
     assert "Authorization" not in Supabase("https://x.supabase.co", "sb_secret_abc").session.headers
     assert Supabase("https://x.supabase.co", "eyJabc").session.headers["Authorization"] == "Bearer eyJabc"
+
+
+def test_pr_row():
+    from mapping import pr_row
+
+    row = pr_row({"typeId": 3, "value": 1385.2, "activityId": 9, "prStartTimeGmtFormatted": "2026-05-03T07:12:00.0"})
+    assert row["type_id"] == 3 and row["value"] == 1385.2 and row["date"] == "2026-05-03"
+    assert pr_row({"value": 1}) is None

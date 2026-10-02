@@ -19,7 +19,7 @@ export function Login() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
-      <form onSubmit={submit} className="w-full max-w-sm space-y-3 rounded-2xl border border-line bg-surface p-6">
+      <form onSubmit={submit} className="w-full max-w-sm space-y-3 card p-6">
         <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="h-12 w-12 rounded-xl" />
         <h1 className="text-xl font-semibold">Training</h1>
         <input className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 outline-none focus:border-accent" type="email" autoComplete="username" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} required />

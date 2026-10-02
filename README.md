@@ -22,7 +22,7 @@ Garmin Connect ──(python-garminconnect, alle 30 min + Knopf)──► GitHub
 
 ### 1. Supabase
 1. Auf [supabase.com](https://supabase.com) kostenloses Projekt anlegen (Region Frankfurt).
-2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql`, `0004_feedback_watch.sql`, `0005_gym.sql` und `0006_sync_cron.sql` einfügen, jeweils **Run**. In `0006_sync_cron.sql` vorher die zwei Platzhalter ersetzen (steht oben in der Datei); sie startet den Sync alle 30 Minuten.
+2. **SQL Editor** öffnen, nacheinander den Inhalt von `supabase/migrations/0001_init.sql`, `0002_plan.sql`, `0003_readiness.sql`, `0004_feedback_watch.sql`, `0005_gym.sql`, `0006_sync_cron.sql` und `0007_personal_records.sql` einfügen, jeweils **Run**. In `0006_sync_cron.sql` vorher die zwei Platzhalter ersetzen (steht oben in der Datei); sie startet den Sync alle 30 Minuten.
 3. **Authentication → Users → Add user**: deine E-Mail und ein Passwort (das ist der App-Login, nicht Garmin).
 4. **Authentication → Sign In / Providers**: „Allow new users to sign up“ **ausschalten**. Damit bist du der einzige Nutzer.
 5. **Project Settings → API**: `Project URL` (z.B. `https://xxxx.supabase.co`, ohne `/rest/v1`), `anon`-Key und `service_role`-Key notieren.
