@@ -3,6 +3,7 @@ import { Sheet } from '../components/Sheet'
 import { toast } from '../lib/toast'
 import { Card, Pill, Ring, SportIcon } from '../components/ui'
 import { dateLabel } from '../lib/format'
+import { guessType, handledIds, markHandled, openSuggestions, type GarminRace } from '../lib/garminRaces'
 import { tap } from '../lib/haptics'
 import { FEEDBACK_LABEL, progressOf, restoreOriginal } from '../lib/plan/adapt'
 import { addDays, daysBetween, localToday, mondayOf, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from '../lib/plan/dates'
@@ -19,11 +20,13 @@ import { RaceCheck } from './PlanInsights'
 import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
 
-export function Plan({ plan, activities, records, predictions }: { plan: PlanState; activities?: Activity[]; records?: Best[]; predictions?: RacePrediction[] }) {
+export function Plan({ plan, activities, records, predictions, garminRaces }: { plan: PlanState; activities?: Activity[]; records?: Best[]; predictions?: RacePrediction[]; garminRaces?: GarminRace[] }) {
   const today = localToday()
   const upcoming = plan.events.filter((e) => e.date >= today)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [editing, setEditing] = useState<RaceEvent | 'new' | null>(null)
+  const [editing, setEditing] = useState<RaceEvent | 'new' | { draft: Partial<RaceEvent>; garminId: number } | null>(null)
+  const [handled, setHandled] = useState(handledIds)
+  const suggestions = openSuggestions(garminRaces ?? [], plan.events, today, handled)
   const [openId, setOpenId] = useState<string | null>(null)
 
   const selected = plan.events.find((e) => e.id === selectedId) ?? upcoming[0] ?? plan.events.at(-1)
@@ -64,6 +67,30 @@ export function Plan({ plan, activities, records, predictions }: { plan: PlanSta
         </button>
       </div>
 
+      {suggestions.map((r) => (
+        <Card key={r.id} title="Rennen aus Garmin" subtitle={`${r.name} · ${dateLabel(r.date, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}`}>
+          <p className="text-sm text-ink-2">In deinem Garmin-Kalender eingetragen. Übernehmen, damit ich dir einen Plan dafür erstelle?</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                markHandled(r.id)
+                setHandled(handledIds())
+                toast('Ausgeblendet.')
+              }}
+              className="min-h-11 rounded-xl bg-surface-2 text-sm font-medium text-ink-2"
+            >
+              Ignorieren
+            </button>
+            <button
+              onClick={() => setEditing({ draft: { name: r.name, date: r.date, type: guessType(r) }, garminId: r.id })}
+              className="min-h-11 rounded-xl bg-accent text-sm font-semibold text-white"
+            >
+              Übernehmen
+            </button>
+          </div>
+        </Card>
+      ))}
+
       {!selected && !plan.error && (
         <Card>
           <p className="text-sm text-ink-2">Noch kein Rennen geplant. Lege dein Ziel an, dann erstelle ich dir einen Trainingsplan bis zum Renntag.</p>
@@ -81,10 +108,15 @@ export function Plan({ plan, activities, records, predictions }: { plan: PlanSta
 
       {editing && (
         <EventForm
-          event={editing === 'new' ? null : editing}
+          event={editing === 'new' || 'draft' in editing ? null : editing}
+          draft={editing !== 'new' && 'draft' in editing ? editing.draft : undefined}
           onClose={() => setEditing(null)}
           onSave={async (e, isNew) => {
             await plan.saveEvent(e, isNew)
+            if (editing !== 'new' && 'draft' in editing) {
+              markHandled(editing.garminId)
+              setHandled(handledIds())
+            }
             setSelectedId(e.id)
             setEditing(null)
           }}
@@ -401,18 +433,19 @@ function joinGoal([h, m, s]: [string, string, string]): number | null | 'invalid
 
 const DEFAULT_DAYS: Record<EventType, number> = { '5k': 4, '10k': 4, half: 4, marathon: 5, tri_sprint: 5, tri_olympic: 6, tri_70_3: 6, tri_ironman: 6 }
 
-function EventForm({ event, onClose, onSave, onDelete }: {
+function EventForm({ event, draft, onClose, onSave, onDelete }: {
   event: RaceEvent | null
+  draft?: Partial<RaceEvent>
   onClose: () => void
   onSave: (e: RaceEvent, isNew: boolean) => Promise<void>
   onDelete: (id: string) => Promise<void>
 }) {
   const today = localToday()
-  const [name, setName] = useState(event?.name ?? '')
-  const [type, setType] = useState<EventType>(event?.type ?? 'half')
-  const [date, setDate] = useState(event?.date ?? addDays(today, 16 * 7))
+  const [name, setName] = useState(event?.name ?? draft?.name ?? '')
+  const [type, setType] = useState<EventType>(event?.type ?? draft?.type ?? 'half')
+  const [date, setDate] = useState(event?.date ?? draft?.date ?? addDays(today, 16 * 7))
   const [goal, setGoal] = useState(splitGoal(event?.goal_time_s))
-  const [days, setDays] = useState(event?.days_per_week ?? DEFAULT_DAYS['half'])
+  const [days, setDays] = useState(event?.days_per_week ?? DEFAULT_DAYS[draft?.type ?? 'half'])
   const [longDay, setLongDay] = useState(event?.long_day ?? 6)
   const [notes, setNotes] = useState(event?.notes ?? '')
   const [busy, setBusy] = useState(false)

@@ -1,4 +1,5 @@
 import { demoDataset } from './demo'
+import type { GarminRace } from './garminRaces'
 import { supabase } from './supabase'
 import { bestsFromActivities, DISTANCES, mergeBests, WINDOW, type Best, type GarminRecord } from './records'
 import type { Activity, Dataset, DailyMetrics, RacePrediction, SyncRun } from './types'
@@ -11,7 +12,7 @@ const DAY_COLS =
 export async function loadDataset(days = 180): Promise<Dataset> {
   if (!supabase) return demoDataset()
   const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10)
-  const [a, d, s, records, drift, predictions] = await Promise.all([
+  const [a, d, s, records, drift, predictions, races] = await Promise.all([
     supabase.from('activities').select(ACTIVITY_COLS).gte('local_date', since).order('start_time', { ascending: false }),
     supabase.from('daily_metrics').select(DAY_COLS).gte('date', since).order('date'),
     supabase.from('sync_runs').select('*').order('started_at', { ascending: false }).limit(1),
@@ -19,6 +20,7 @@ export async function loadDataset(days = 180): Promise<Dataset> {
     // Spalten und Tabelle aus Migration 0008; fehlen sie, bleibt es bei leeren Werten.
     supabase.from('activities').select('id,decoupling_pct').gte('local_date', since).not('decoupling_pct', 'is', null),
     supabase.from('race_predictions').select('date,time_5k,time_10k,time_half,time_marathon').gte('date', since).order('date'),
+    supabase.from('garmin_races').select('id,name,date,distance_m,sport').order('date'),
   ])
   const err = a.error ?? d.error ?? s.error
   if (err) throw new Error(err.message)
@@ -29,6 +31,7 @@ export async function loadDataset(days = 180): Promise<Dataset> {
     lastSync: (s.data?.[0] as SyncRun) ?? null,
     records,
     predictions: predictions.error ? [] : (predictions.data as RacePrediction[]),
+    garminRaces: races.error ? [] : (races.data as GarminRace[]),
   }
 }
 

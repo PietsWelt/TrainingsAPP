@@ -111,3 +111,15 @@ def test_prediction_row():
     assert row == {"date": "2026-10-02", "time_5k": 1250, "time_10k": 2600, "time_half": 5800, "time_marathon": 12300}
     assert prediction_row("2026-10-02", {}) is None
     assert prediction_row("2026-10-02", [{"time5K": 1300}])["time_5k"] == 1300
+
+
+def test_race_row_takes_only_race_events():
+    from mapping import race_row
+
+    race = {"itemType": "event", "id": 77, "title": "Stadtlauf", "date": "2027-04-11", "isRace": True,
+            "completionTarget": {"value": 21.0975, "unit": "kilometer", "unitType": "distance"}, "eventType": "running"}
+    row = race_row(race)
+    assert row["id"] == 77 and row["date"] == "2027-04-11" and row["distance_m"] == 21097.5 and row["sport"] == "running"
+    assert race_row({"itemType": "workout", "id": 1, "title": "Plan · Intervalle", "date": "2027-04-01"}) is None
+    assert race_row({**race, "isRace": False}) is None
+    assert race_row({**race, "completionTarget": None})["distance_m"] is None

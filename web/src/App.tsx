@@ -124,7 +124,7 @@ function Main() {
         {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
         {!data && !error && <SkeletonPage />}
         {data && tab === 'today' && <Today data={data} plan={plan} log={log} onOpenActivity={setOpenId} onOpenPlan={() => selectTab('plan')} />}
-        {data && tab === 'plan' && <Plan plan={plan} activities={data.activities} records={data.records} predictions={data.predictions} />}
+        {data && tab === 'plan' && <Plan plan={plan} activities={data.activities} records={data.records} predictions={data.predictions} garminRaces={data.garminRaces} />}
         {data && tab === 'trends' && <Trends data={data} drinks={log.drinks} gym={log.gym} plan={plan} />}
         {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
       </main>

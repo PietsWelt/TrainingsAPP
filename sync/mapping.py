@@ -167,3 +167,37 @@ def prediction_row(day: str, p: dict[str, Any] | list[Any] | None) -> dict[str, 
         "time_marathon": as_int(p.get("timeMarathon")),
     }
     return row if any(v for k, v in row.items() if k != "date") else None
+
+
+_UNIT_M = {"meter": 1.0, "kilometer": 1000.0, "mile": 1609.344}
+
+
+def race_row(item: dict[str, Any]) -> dict[str, Any] | None:
+    """Ein Rennen aus dem Garmin-Kalender (Eintrag vom Typ „event“, als Rennen markiert).
+
+    Geplante Workouts, auch die von der App („Plan · …“) und vom Garmin Coach, werden ignoriert.
+    """
+    if item.get("itemType") != "event" or item.get("isRace") is False:
+        return None
+    if item.get("id") is None or not item.get("date") or not item.get("title"):
+        return None
+    target = item.get("completionTarget") or {}
+    distance = None
+    if isinstance(target, dict) and target.get("unitType") in (None, "distance"):
+        factor = _UNIT_M.get(str(target.get("unit", "meter")).lower())
+        if factor and isinstance(target.get("value"), (int, float)):
+            distance = round(target["value"] * factor, 1)
+    return {
+        "id": int(item["id"]),
+        "name": str(item["title"])[:120],
+        "date": str(item["date"])[:10],
+        "distance_m": distance,
+        "sport": _type_key(item.get("eventType") or item.get("activityType")),
+        "raw": item,
+    }
+
+
+def _type_key(v: Any) -> str | None:
+    if isinstance(v, dict):
+        v = v.get("typeKey") or v.get("key")
+    return str(v) if v else None
