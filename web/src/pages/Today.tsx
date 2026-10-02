@@ -3,6 +3,9 @@ import { ZoneBar } from '../components/charts'
 import { hrvState, restingHrDelta, weeklyTotals } from '../lib/derive'
 import { dateLabel, duration, hoursMin, km, speed, sportGroup, sportLabel } from '../lib/format'
 import type { Dataset } from '../lib/types'
+import { localToday } from '../lib/plan/dates'
+import type { PlanState } from '../lib/plan/usePlan'
+import { workoutAmount } from '../lib/plan/labels'
 
 function readinessStatus(score: number): { status: Status; text: string } {
   if (score >= 75) return { status: 'good', text: 'Bereit für Belastung' }
@@ -11,7 +14,7 @@ function readinessStatus(score: number): { status: Status; text: string } {
   return { status: 'critical', text: 'Erholung' }
 }
 
-export function Today({ data, onOpenActivity }: { data: Dataset; onOpenActivity: (id: number) => void }) {
+export function Today({ data, plan, onOpenActivity, onOpenPlan }: { data: Dataset; plan: PlanState; onOpenActivity: (id: number) => void; onOpenPlan: () => void }) {
   const day = data.days.at(-1)
   const lastNight = [...data.days].reverse().find((d) => d.sleep_s)
   const hrv = hrvState(day)
@@ -32,6 +35,7 @@ export function Today({ data, onOpenActivity }: { data: Dataset; onOpenActivity:
 
   return (
     <div className="space-y-3">
+      <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
       {readiness != null && (
         <Card>
           <div className="flex items-center gap-4">
@@ -154,5 +158,40 @@ function ReadinessRing({ value }: { value: number }) {
         {value}
       </text>
     </svg>
+  )
+}
+
+function PlannedToday({ plan, onOpenPlan }: { plan: PlanState; onOpenPlan: () => void }) {
+  const today = localToday()
+  const ws = plan.workouts.filter((w) => w.date === today && w.status !== 'skipped')
+  if (!plan.events.some((e) => e.date >= today)) return null
+  const race = (id: string) => plan.events.find((e) => e.id === id)?.name
+  return (
+    <button onClick={onOpenPlan} className="block w-full text-left">
+      <Card title="Heute geplant">
+        {ws.length === 0 ? (
+          <p className="text-sm text-ink-2">Ruhetag. Erholung gehört zum Plan.</p>
+        ) : (
+          <ul className="space-y-2">
+            {ws.map((w) => (
+              <li key={w.id} className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className={`truncate text-[15px] font-semibold ${w.status === 'done' ? 'text-ink-3' : ''}`}>{w.title}</div>
+                  <div className="text-xs text-ink-3">
+                    {workoutAmount(w)}
+                    {plan.events.length > 1 && ` · ${race(w.event_id)}`}
+                  </div>
+                </div>
+                {w.status === 'done' ? (
+                  <span className="text-xs font-medium" style={{ color: 'var(--good)' }}>✓ Erledigt</span>
+                ) : (
+                  <span className="text-accent">›</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </button>
   )
 }
