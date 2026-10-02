@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Activity } from '../types'
 import { autoComplete, fillSteps, giveFeedback, skipWorkout } from './adapt'
 import { analyzeRun, merge, shiftPaces } from './analyze'
+import { catchUp, reentry } from './catchup'
+import { sportGroup } from '../format'
+import { toast } from '../toast'
 import { addDays, localToday } from './dates'
 import { fitnessFrom } from './fitness'
 import { generatePlan } from './generate'
@@ -57,12 +60,24 @@ export function usePlan(activities: Activity[] | undefined): PlanState {
         : []
       // Frisch erledigte Läufe mit Uhr-Daten automatisch auswerten (nur die letzten 3 Tage, nie rückwirkend).
       let current = ws.map((w) => [...done, ...filled].find((c) => c.id === w.id) ?? w)
+      // Verpasstes auslassen oder als ersetzt werten, nach einer Pause sanft wieder einsteigen.
+      let tidy: PlanWorkout[] = []
+      if (activities) {
+        const cu = catchUp(current, activities, today, new Date().getHours())
+        current = current.map((w) => cu.changed.find((c) => c.id === w.id) ?? w)
+        const re = reentry(current, activities, today)
+        current = current.map((w) => re.changed.find((c) => c.id === w.id) ?? w)
+        tidy = merge(cu.changed, re.changed)
+        const notes = [...cu.messages, ...re.messages]
+        if (notes.length) toast(`Plan angepasst: ${notes.join(' ')}`)
+      }
       let analyzed: PlanWorkout[] = []
       if (hasColumn('feedback') && activities) {
         for (const w of current) {
           if (w.status !== 'done' || w.feedback || w.activity_id == null || w.date < addDays(today, -3)) continue
           const act = activities.find((a) => a.id === w.activity_id)
-          const res = act && analyzeRun(w, act)
+          // Ersatzsport (z.B. Rad statt Lauf) wird nicht als Lauf ausgewertet.
+          const res = act && sportGroup(act.sport) === w.sport && analyzeRun(w, act)
           if (!res) continue
           const fb = giveFeedback(current, w.id, res.verdict, today).changed
           const step = merge(fb, shiftPaces(merge(current, fb), w, res.group, res.paceShift, today))
@@ -70,7 +85,7 @@ export function usePlan(activities: Activity[] | undefined): PlanState {
           current = current.map((x) => step.find((c) => c.id === x.id) ?? x)
         }
       }
-      const all = merge(done, filled, analyzed)
+      const all = merge(done, filled, tidy, analyzed)
       if (all.length) await planStore.updateWorkouts(all)
       const byId = new Map(current.map((w) => [w.id, w]))
       setEvents(ev)

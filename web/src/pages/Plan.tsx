@@ -11,6 +11,7 @@ import type { PlanState } from '../lib/plan/usePlan'
 import { stepLines, workoutAmount } from '../lib/plan/labels'
 import { AnalysisBlock, FeedbackChips } from './PlanFeedback'
 import { analysisFor } from '../lib/plan/analyze'
+import { replacedBy } from '../lib/plan/catchup'
 import { explain } from '../lib/plan/explain'
 import type { Activity, RacePrediction } from '../lib/types'
 import type { Best } from '../lib/records'
@@ -74,7 +75,7 @@ export function Plan({ plan, activities, records, predictions }: { plan: PlanSta
         <>
           <EventHeader event={selected} workouts={workouts} today={today} onEdit={() => setEditing(selected)} />
           <RaceCheck event={selected} workouts={workouts} activities={activities ?? []} records={records ?? []} predictions={predictions} today={today} />
-          <WeekList workouts={workouts} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
+          <WeekList activities={activities} workouts={workouts} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
         </>
       )}
 
@@ -179,7 +180,7 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
   )
 }
 
-function WeekList({ workouts, today, onOpen, onToggle }: { workouts: PlanWorkout[]; today: string; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
+function WeekList({ workouts, today, activities, onOpen, onToggle }: { workouts: PlanWorkout[]; today: string; activities?: Activity[]; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
   const [showPast, setShowPast] = useState(false)
   const weeks = useMemo(() => {
     const m = new Map<string, PlanWorkout[]>()
@@ -201,13 +202,13 @@ function WeekList({ workouts, today, onOpen, onToggle }: { workouts: PlanWorkout
         </button>
       )}
       {(showPast ? weeks : rest).map(([monday, ws]) => (
-        <Week key={monday} monday={monday} workouts={ws} today={today} onOpen={onOpen} onToggle={onToggle} />
+        <Week key={monday} monday={monday} workouts={ws} today={today} activities={activities} onOpen={onOpen} onToggle={onToggle} />
       ))}
     </div>
   )
 }
 
-function Week({ monday, workouts, today, onOpen, onToggle }: { monday: string; workouts: PlanWorkout[]; today: string; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
+function Week({ monday, workouts, today, activities, onOpen, onToggle }: { monday: string; workouts: PlanWorkout[]; today: string; activities?: Activity[]; onOpen: (id: string) => void; onToggle: (w: PlanWorkout) => void }) {
   const first = workouts[0]
   const runKm = workouts.filter((w) => w.sport === 'run').reduce((a, w) => a + (w.distance_km ?? 0), 0)
   const mins = workouts.filter((w) => w.sport !== 'race').reduce((a, w) => a + (w.duration_min ?? 0), 0)
@@ -244,7 +245,7 @@ function Week({ monday, workouts, today, onOpen, onToggle }: { monday: string; w
                   {w.feedback && w.feedback !== 'ok' && ` · ${FEEDBACK_LABEL[w.feedback].toLowerCase()}`}
                 </span>
               </span>
-              <StatusMark w={w} today={today} />
+              <StatusMark w={w} today={today} replaced={replacedBy(w, activities?.find((a) => a.id === w.activity_id))} />
             </button>
             {w.sport !== 'race' && w.status !== 'skipped' && <CheckButton w={w} onToggle={onToggle} />}
           </li>
@@ -254,7 +255,8 @@ function Week({ monday, workouts, today, onOpen, onToggle }: { monday: string; w
   )
 }
 
-function StatusMark({ w, today }: { w: PlanWorkout; today: string }) {
+function StatusMark({ w, today, replaced }: { w: PlanWorkout; today: string; replaced: string | null }) {
+  if (replaced) return <span className="text-xs text-ink-3">Ersetzt: {replaced}</span>
   if (w.status === 'done') return null
   if (w.status === 'skipped') return <span className="text-xs text-ink-3">Ausgelassen</span>
   if (w.date < today) return <span className="text-xs" style={{ color: 'var(--warning)' }}>▲ Offen</span>

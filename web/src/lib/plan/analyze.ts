@@ -1,3 +1,4 @@
+import { sportGroup } from '../format'
 // Automatische Auswertung eines Laufs: Puls-Zonen, Trainingseffekt und Anstrengung von der Uhr
 // gegen das Ziel der Einheit. Daraus folgt „zu leicht / passend / zu hart“ und eine kleine
 // Anpassung der Zieltempos künftiger Einheiten derselben Art.
@@ -133,5 +134,5 @@ export function merge(...lists: PlanWorkout[][]): PlanWorkout[] {
 
 export function analysisFor(w: PlanWorkout, activities: Activity[] | undefined): Analysis | null {
   const a = w.activity_id != null ? activities?.find((x) => x.id === w.activity_id) : undefined
-  return a ? analyzeRun(w, a) : null
+  return a && sportGroup(a.sport) === w.sport ? analyzeRun(w, a) : null
 }
