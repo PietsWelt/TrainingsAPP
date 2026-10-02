@@ -3,10 +3,12 @@
 /* Farben als Rollen; Serienfarben aus einer CVD-geprüften Palette (hell/dunkel getrennt gewählt). */
 :root {
   color-scheme: light;
-  --bg: #f4f4f2;
-  --surface: #fcfcfb;
-  --surface-2: #f0efec;
-  --border: #e4e3df;
+  --bg: #f3f3f1;
+  --surface: #ffffff;
+  --surface-2: #f0f0ed;
+  --border: #e6e5e1;
+  --shadow: 0 1px 2px rgb(20 20 15 / 0.04), 0 6px 20px -8px rgb(20 20 15 / 0.08);
+  --card-border: transparent;
   --text: #0b0b0b;
   --text-2: #52514e;
   --text-3: #8a8984;
@@ -29,10 +31,12 @@
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --bg: #111110;
-    --surface: #1a1a19;
-    --surface-2: #242422;
-    --border: #2e2e2b;
+    --bg: #0c0c0b;
+    --surface: #171716;
+    --surface-2: #222220;
+    --border: #2b2b28;
+    --shadow: none;
+    --card-border: #232321;
     --text: #ffffff;
     --text-2: #c3c2b7;
     --text-3: #8a8984;
@@ -73,6 +77,18 @@ body {
 }
 .recharts-wrapper *:focus { outline: none; }
 
+/* Karten: hell mit weichem Schatten, dunkel mit feiner Kante. */
+.card { background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow); border-radius: 22px; }
+.accent-soft { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.page-in > * { animation: fade-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.page-in > *:nth-child(2) { animation-delay: 30ms; }
+.page-in > *:nth-child(3) { animation-delay: 60ms; }
+.page-in > *:nth-child(4) { animation-delay: 90ms; }
+.page-in > *:nth-child(n+5) { animation-delay: 120ms; }
+
 /* Touch: kein Doppeltipp-Zoom, keine Textauswahl auf Bedienelementen, sichtbares Drücken. */
 html { -webkit-text-size-adjust: 100%; }
 button, a, label, select, [role="button"] { touch-action: manipulation; }
@@ -89,6 +105,6 @@ input, select, textarea { font-size: 16px; } /* verhindert Auto-Zoom auf iOS */
 .toast-in { animation: toast-in 200ms ease-out; }
 .skeleton { background: var(--surface-2); animation: shimmer 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .sheet-in, .toast-in, .skeleton { animation: none; }
+  .sheet-in, .toast-in, .skeleton, .page-in > * { animation: none; }
   button:not(:disabled):active { transform: none; }
 }

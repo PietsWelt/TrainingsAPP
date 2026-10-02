@@ -104,3 +104,17 @@ def daily_row(
             "max_metrics": max_metrics,
         },
     }
+
+
+def pr_row(r: dict[str, Any]) -> dict[str, Any] | None:
+    """Ein Garmin-Rekord. typeId bestimmt die Art (z.B. 3 = 5 km), value ist Zeit oder Strecke."""
+    if r.get("typeId") is None:
+        return None
+    when = r.get("prStartTimeGmtFormatted") or r.get("actStartDateTimeInGMTFormatted") or ""
+    return {
+        "type_id": int(r["typeId"]),
+        "value": r.get("value"),
+        "activity_id": r.get("activityId"),
+        "date": when[:10] or None,
+        "raw": r,
+    }

@@ -6,7 +6,8 @@ import { usePullToRefresh } from './lib/usePullToRefresh'
 import { useDailyLog } from './lib/useDailyLog'
 import type { Session } from '@supabase/supabase-js'
 import { loadDataset, triggerSync } from './lib/data'
-import { relativeTime } from './lib/format'
+import { dateLabel, relativeTime } from './lib/format'
+import { localToday } from './lib/plan/dates'
 import { supabase } from './lib/supabase'
 import type { Dataset } from './lib/types'
 import { Activities, ActivityDetail } from './pages/Activities'
@@ -92,18 +93,21 @@ function Main() {
 
   return (
     <div className="mx-auto min-h-dvh max-w-xl">
-      <header className="sticky top-0 z-10 bg-bg/90 px-4 pb-2 backdrop-blur" style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}>
-        <div className="flex items-end justify-between">
-          <h1 className="text-[28px] font-bold tracking-tight">{TITLES[tab]}</h1>
-          <button onClick={syncNow} disabled={syncing} className="mb-0.5 flex min-h-9 items-center gap-1.5 rounded-full bg-surface-2 px-3.5 text-[13px] font-medium text-ink-2 disabled:opacity-70">
+      <header className="sticky top-0 z-10 bg-bg/85 px-5 pb-3 backdrop-blur-xl" style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[13px] font-medium text-ink-3">{tab === 'today' ? dateLabel(localToday(), { weekday: 'long', day: 'numeric', month: 'long' }) : <SyncStatus data={data} />}</p>
+            <h1 className="text-[30px] leading-tight font-bold tracking-tight">{TITLES[tab]}</h1>
+          </div>
+          <button onClick={syncNow} disabled={syncing} aria-label="Mit Garmin synchronisieren" className="card relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-2 disabled:opacity-70">
             <SyncIcon spinning={syncing} />
-            {syncing ? 'Synchronisiere …' : 'Sync'}
+            <SyncDot data={data} />
           </button>
         </div>
-        <SyncStatus data={data} />
+        {tab === 'today' && <p className="mt-0.5 text-xs text-ink-3"><SyncStatus data={data} /></p>}
       </header>
 
-      <main className="px-4 pt-2" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 84px)' }}>
+      <main className="px-4 pt-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 100px)' }}>
         <PullIndicator pull={ptr.pull} ready={ptr.ready} busy={ptr.busy} />
         {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
         {!data && !error && <SkeletonPage />}
@@ -113,8 +117,8 @@ function Main() {
         {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="mx-auto grid max-w-xl grid-cols-4">
+      <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}>
+        <div className="card pointer-events-auto mx-auto grid max-w-md grid-cols-4 gap-1 rounded-full p-1.5 backdrop-blur-xl" style={{ background: 'color-mix(in srgb, var(--surface) 86%, transparent)' }}>
           <NavButton active={tab === 'today'} onClick={() => selectTab('today')} label="Heute" icon={<path d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4-1.4 1.4M7 17l-1.4 1.4m12.8 0L17 17M7 7 5.6 5.6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />} />
           <NavButton active={tab === 'plan'} onClick={() => selectTab('plan')} label="Plan" icon={<path d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 9 2 2 4-4" />} />
           <NavButton active={tab === 'trends'} onClick={() => selectTab('trends')} label="Trends" icon={<path d="M3 17l5-5 4 4 8-8m0 0h-5m5 0v5" />} />
@@ -130,15 +134,16 @@ function Main() {
 
 function SyncStatus({ data }: { data: Dataset | null }) {
   const s = data?.lastSync
-  if (!supabase) return <p className="text-xs text-ink-3">Demo-Modus mit Beispieldaten</p>
-  if (!s) return <p className="text-xs text-ink-3">Noch kein Sync gelaufen</p>
-  if (s.status === 'error')
-    return (
-      <p className="text-xs" style={{ color: 'var(--critical)' }}>
-        ■ Sync fehlgeschlagen {relativeTime(s.started_at)}
-      </p>
-    )
-  return <p className="text-xs text-ink-3">Garmin synchronisiert {relativeTime(s.finished_at ?? s.started_at)}</p>
+  if (!supabase) return <span>Demo-Modus mit Beispieldaten</span>
+  if (!s) return <span>Noch kein Sync gelaufen</span>
+  if (s.status === 'error') return <span style={{ color: 'var(--critical)' }}>■ Sync fehlgeschlagen {relativeTime(s.started_at)}</span>
+  return <span>Garmin synchronisiert {relativeTime(s.finished_at ?? s.started_at)}</span>
+}
+
+/** Punkt am Sync-Knopf: rot bei Fehler, sonst nichts. */
+function SyncDot({ data }: { data: Dataset | null }) {
+  if (data?.lastSync?.status !== 'error') return null
+  return <span className="absolute top-2 right-2 h-2 w-2 rounded-full" style={{ background: 'var(--critical)' }} aria-hidden />
 }
 
 function PullIndicator({ pull, ready, busy }: { pull: number; ready: boolean; busy: boolean }) {
@@ -152,8 +157,8 @@ function PullIndicator({ pull, ready, busy }: { pull: number; ready: boolean; bu
 
 function NavButton({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: ReactNode }) {
   return (
-    <button onClick={onClick} aria-current={active ? 'page' : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium ${active ? 'text-accent' : 'text-ink-3'}`}>
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <button onClick={onClick} aria-current={active ? 'page' : undefined} className={`flex min-h-13 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 text-[11px] font-medium transition-colors ${active ? 'accent-soft text-accent' : 'text-ink-3'}`}>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         {icon}
       </svg>
       {label}
@@ -163,7 +168,7 @@ function NavButton({ active, onClick, label, icon }: { active: boolean; onClick:
 
 function SyncIcon({ spinning }: { spinning: boolean }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={spinning ? 'animate-spin' : ''}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={spinning ? 'animate-spin' : ''}>
       <path d="M21 12a9 9 0 1 1-3-6.7L21 8m0-5v5h-5" />
     </svg>
   )

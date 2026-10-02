@@ -1,3 +1,4 @@
+import { bestsFromActivities, mergeBests } from './records'
 import type { Activity, Dataset, DailyMetrics } from './types'
 
 // Realistisch wirkende Beispieldaten, solange Supabase noch nicht eingerichtet ist.
@@ -91,6 +92,14 @@ export function demoDataset(): Dataset {
   return {
     activities,
     days,
+    records: mergeBests(
+      [
+        { type_id: 1, value: 221, activity_id: null, date: '2026-05-14' },
+        { type_id: 3, value: 1238, activity_id: null, date: '2026-04-26' },
+        { type_id: 4, value: 2604, activity_id: null, date: new Date(Date.now() - 9 * 86400_000).toISOString().slice(0, 10) },
+      ],
+      bestsFromActivities(activities),
+    ),
     lastSync: { id: 0, trigger: 'demo', started_at: new Date(Date.now() - 12 * 60000).toISOString(), finished_at: null, status: 'ok', message: null },
   }
 }

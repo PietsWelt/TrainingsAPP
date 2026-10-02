@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, StatusLabel } from '../components/ui'
+import { Card, Pill, Ring, StatusLabel } from '../components/ui'
 import { tap } from '../lib/haptics'
 import { legsProposal, readinessProposal } from '../lib/plan/adapt'
 import { addDays } from '../lib/plan/dates'
@@ -13,19 +13,23 @@ import type { DailyLogState } from '../lib/useDailyLog'
 export function ReadinessCard({ r, garmin }: { r: Readiness; garmin: number | null | undefined }) {
   const [open, setOpen] = useState(false)
   return (
-    <Card>
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="press-row -m-2 flex w-[calc(100%+1rem)] items-center gap-4 rounded-xl p-2 text-left">
-        <Ring value={r.score} />
+    <Card className="p-5">
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="press-row -m-2 flex w-[calc(100%+1rem)] items-center gap-5 rounded-2xl p-2 text-left">
+        <Ring value={r.score} size={108} stroke={10} color={barColor(r.score)} label={`Readiness ${r.score} von 100`}>
+          <span className="text-[34px] leading-none font-bold tracking-tight">{r.score}</span>
+          <span className="mt-0.5 text-[11px] text-ink-3">von 100</span>
+        </Ring>
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium text-ink-2">Deine Readiness</div>
-          <div className="mt-1 text-lg font-semibold">
+          <div className="text-xs font-medium text-ink-3">Deine Readiness</div>
+          <div className="mt-1 text-[19px] leading-snug font-semibold tracking-tight">
             <StatusLabel status={r.status}>{r.headline}</StatusLabel>
           </div>
-          <div className="mt-1 text-xs text-ink-2">{r.advice}</div>
+          <div className="mt-1 text-[13px] leading-snug text-ink-2">{r.advice}</div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {garmin != null && <Pill color="var(--text-2)">Garmin {garmin}</Pill>}
+            <Pill>{open ? 'Weniger' : 'Details'}</Pill>
+          </div>
         </div>
-        <span className={`text-ink-3 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>
-          ›
-        </span>
       </button>
       {open && (
         <div className="mt-4 space-y-3 border-t border-line pt-3">
@@ -53,20 +57,6 @@ export function ReadinessCard({ r, garmin }: { r: Readiness; garmin: number | nu
 }
 
 const barColor = (s: number) => (s >= 70 ? 'var(--good)' : s >= 50 ? 'var(--warning)' : s >= 35 ? 'var(--serious)' : 'var(--critical)')
-
-function Ring({ value }: { value: number }) {
-  const r = 30
-  const c = 2 * Math.PI * r
-  return (
-    <svg width="76" height="76" viewBox="0 0 76 76" className="shrink-0" role="img" aria-label={`Readiness ${value} von 100`}>
-      <circle cx="38" cy="38" r={r} fill="none" stroke="var(--surface-2)" strokeWidth="8" />
-      <circle cx="38" cy="38" r={r} fill="none" stroke={barColor(value)} strokeWidth="8" strokeLinecap="round" strokeDasharray={`${(value / 100) * c} ${c}`} transform="rotate(-90 38 38)" />
-      <text x="38" y="44" textAnchor="middle" fontSize="20" fontWeight="600" fill="var(--text)">
-        {value}
-      </text>
-    </svg>
-  )
-}
 
 const DISMISS_KEY = 'readiness.dismissed'
 

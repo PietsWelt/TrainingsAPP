@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Sheet } from '../components/Sheet'
 import { toast } from '../lib/toast'
-import { Card } from '../components/ui'
+import { Card, Pill, Ring, SportIcon } from '../components/ui'
 import { dateLabel } from '../lib/format'
 import { tap } from '../lib/haptics'
 import { FEEDBACK_LABEL, progressOf, restoreOriginal } from '../lib/plan/adapt'
@@ -14,7 +14,6 @@ import { analysisFor } from '../lib/plan/analyze'
 import type { Activity } from '../lib/types'
 import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
-const SPORT_ICON: Record<PlanWorkout['sport'], string> = { run: '🏃', bike: '🚴', swim: '🏊', race: '🏁' }
 
 export function Plan({ plan, activities }: { plan: PlanState; activities?: Activity[] }) {
   const today = localToday()
@@ -41,22 +40,22 @@ export function Plan({ plan, activities }: { plan: PlanState; activities?: Activ
   if (plan.loading) return <div className="p-10 text-center text-sm text-ink-3">Lade Plan …</div>
 
   return (
-    <div className="space-y-3">
+    <div className="page-in space-y-3">
       {plan.error && <div className="rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{plan.error}</div>}
 
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1">
         {plan.events.map((e) => (
           <button
             key={e.id}
             onClick={() => {
               setSelectedId(e.id)
             }}
-            className={`min-h-9 shrink-0 rounded-full border px-3.5 text-sm font-medium ${e.id === selected?.id ? 'border-accent bg-accent text-white' : 'border-line bg-surface text-ink-2'} ${e.date < today ? 'opacity-60' : ''}`}
+            className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-medium ${e.id === selected?.id ? 'bg-ink text-bg' : 'card text-ink-2'} ${e.date < today ? 'opacity-60' : ''}`}
           >
             {e.name}
           </button>
         ))}
-        <button onClick={() => setEditing('new')} className="min-h-9 shrink-0 rounded-full border border-dashed border-line px-3.5 text-sm font-medium text-accent">
+        <button onClick={() => setEditing('new')} className="min-h-10 shrink-0 rounded-full border border-dashed border-line px-4 text-sm font-medium text-accent">
           + Rennen
         </button>
       </div>
@@ -131,36 +130,46 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
   const current = workouts.find((w) => w.date >= today) ?? workouts.at(-1)
   const pct = p.total ? (p.done / p.total) * 100 : 0
   const duePct = p.total ? (p.dueSoFar / p.total) * 100 : 0
+  const days = p.daysToRace != null && p.daysToRace >= 0 ? p.daysToRace : null
+  const span = workouts.length ? Math.max(1, daysBetween(workouts[0].date, event.date)) : 1
   return (
-    <Card>
+    <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs text-ink-3">
+        <div className="min-w-0">
+          <div className="text-xs font-medium text-ink-3">
             {eventTypeLabel(event.type)}
             {event.goal_time_s ? ` · Ziel ${fmtDuration(event.goal_time_s)}` : ''}
           </div>
-          <h2 className="mt-0.5 text-xl font-semibold">{event.name}</h2>
-          <div className="text-xs text-ink-2">{dateLabel(event.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
+          <h2 className="mt-0.5 text-[22px] leading-tight font-semibold tracking-tight">{event.name}</h2>
+          <div className="mt-0.5 text-xs text-ink-2">{dateLabel(event.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
         </div>
-        <button onClick={onEdit} className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-2">Bearbeiten</button>
+        <button onClick={onEdit} className="min-h-9 shrink-0 rounded-full bg-surface-2 px-3.5 text-xs font-semibold text-ink-2">Bearbeiten</button>
       </div>
 
-      <div className="mt-4 flex items-baseline gap-1">
-        <span className="text-[28px] leading-none font-semibold tracking-tight">{p.daysToRace != null && p.daysToRace >= 0 ? p.daysToRace : '–'}</span>
-        <span className="text-sm text-ink-3">{p.daysToRace === 1 ? 'Tag bis zum Rennen' : 'Tage bis zum Rennen'}</span>
-      </div>
-
-      {/* Fortschritt: erledigt (Akzent) vor dem Soll bis heute (Markierung). */}
-      <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
-        <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
-        {duePct > 0 && duePct < 100 && <div className="absolute top-0 h-full w-0.5 bg-ink-3" style={{ left: `${duePct}%` }} />}
-      </div>
-      <div className="mt-2 flex justify-between text-xs text-ink-2">
-        <span>
-          {p.done} von {p.total} Einheiten erledigt
-          {p.dueSoFar > 0 && ` · ${p.doneSoFar}/${p.dueSoFar} bis heute`}
-        </span>
-        {current && <span>Woche {current.week_index}/{weeks} · {PHASE_LABEL[current.phase]}</span>}
+      <div className="mt-5 flex items-center gap-5">
+        <Ring value={days != null ? span - days : 0} max={span} size={96} stroke={9} label={`${days ?? 0} Tage bis zum Rennen`}>
+          <span className="text-[28px] leading-none font-bold tracking-tight">{days ?? '–'}</span>
+          <span className="mt-0.5 text-[11px] text-ink-3">{days === 1 ? 'Tag' : 'Tage'}</span>
+        </Ring>
+        <div className="min-w-0 flex-1 space-y-3">
+          {current && (
+            <div>
+              <div className="text-xs text-ink-3">Woche {current.week_index} von {weeks}</div>
+              <div className="text-[15px] font-semibold">{PHASE_LABEL[current.phase]}</div>
+            </div>
+          )}
+          <div>
+            {/* Fortschritt: erledigt (Akzent) vor dem Soll bis heute (Markierung). */}
+            <div className="relative h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
+              {duePct > 0 && duePct < 100 && <div className="absolute top-0 h-full w-0.5 bg-ink-3" style={{ left: `${duePct}%` }} />}
+            </div>
+            <div className="mt-1.5 text-xs text-ink-2">
+              {p.done} von {p.total} Einheiten
+              {p.dueSoFar > 0 && ` · ${p.doneSoFar}/${p.dueSoFar} bis heute`}
+            </div>
+          </div>
+        </div>
       </div>
     </Card>
   )
@@ -200,10 +209,11 @@ function Week({ monday, workouts, today, onOpen, onToggle }: { monday: string; w
   const mins = workouts.filter((w) => w.sport !== 'race').reduce((a, w) => a + (w.duration_min ?? 0), 0)
   const isNow = monday === mondayOf(today)
   return (
-    <Card>
+    <Card className={isNow ? 'p-4 ring-2 ring-accent/30' : ''}>
       <header className="mb-1">
-        <h3 className="text-[15px] font-semibold">
-          Woche {first.week_index} <span className="font-normal text-ink-3">· {PHASE_LABEL[first.phase]}{isNow ? ' · diese Woche' : ''}</span>
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold">
+          Woche {first.week_index} <span className="font-normal text-ink-3">· {PHASE_LABEL[first.phase]}</span>
+          {isNow && <Pill>Diese Woche</Pill>}
         </h3>
         <span className="text-xs text-ink-3">
           {dateLabel(monday)} – {dateLabel(addDays(monday, 6))}
@@ -219,7 +229,7 @@ function Week({ monday, workouts, today, onOpen, onToggle }: { monday: string; w
                 <br />
                 {Number(w.date.slice(8))}.
               </span>
-              <span className="shrink-0 text-lg" aria-hidden>{SPORT_ICON[w.sport]}</span>
+              <SportIcon group={w.sport} size={34} />
               <span className={`min-w-0 flex-1 ${w.status === 'skipped' ? 'text-ink-3 line-through' : ''}`}>
                 <span className="block truncate text-sm">
                   {w.title}
@@ -327,7 +337,10 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
         <div className="text-xs text-ink-3">
           {dateLabel(w.date, { weekday: 'long', day: 'numeric', month: 'long' })} · Woche {w.week_index} · {PHASE_LABEL[w.phase]}
         </div>
-        <h1 className="mt-1 text-2xl font-semibold">{SPORT_ICON[w.sport]} {w.title}</h1>
+        <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold tracking-tight">
+          <SportIcon group={w.sport} size={44} />
+          {w.title}
+        </h1>
         <div className="mt-1 text-sm text-ink-2">{workoutAmount(w)}</div>
         {w.moved_from && <div className="mt-1 text-xs text-ink-3">Verschoben von {WEEKDAY_LONG[weekday(w.moved_from)]}</div>}
         {w.original && <div className="mt-1 text-xs text-ink-3">An deine Readiness angepasst, ursprünglich: {w.original.title}</div>}

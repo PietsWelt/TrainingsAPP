@@ -1,10 +1,11 @@
-import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useId } from 'react'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { dateLabel, hoursMin } from '../lib/format'
 import { ChartTooltip } from './ChartTooltip'
 import { Legend } from './ui'
 
 const axis = { tick: { fill: 'var(--text-3)', fontSize: 11 }, axisLine: false, tickLine: false } as const
-const grid = <CartesianGrid vertical={false} stroke="var(--border)" />
+const grid = <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="2 4" />
 const cursor = { fill: 'var(--surface-2)' }
 const lineCursor = { stroke: 'var(--text-3)', strokeDasharray: '3 3' }
 const shortDate = (l: string) => dateLabel(l)
@@ -19,7 +20,7 @@ export function WeeklyDistanceChart({ data }: { data: { week: string; km: number
         <XAxis dataKey="week" tickFormatter={shortDate} {...axis} minTickGap={16} />
         <YAxis {...axis} width={44} />
         <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={weekLabel} valueFormat={(v) => `${v.toFixed(1).replace('.', ',')} km`} />} />
-        <Bar isAnimationActive={false} dataKey="km" name="Laufen" fill="var(--series-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+        <Bar isAnimationActive={false} dataKey="km" name="Laufen" fill="var(--series-1)" radius={[6, 6, 6, 6]} maxBarSize={22} />
       </BarChart>
     </ResponsiveContainer>
   )
@@ -33,7 +34,7 @@ export function WeeklyDrinksChart({ data }: { data: { week: string; drinks: numb
         <XAxis dataKey="week" tickFormatter={shortDate} {...axis} minTickGap={16} />
         <YAxis {...axis} width={44} allowDecimals={false} />
         <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={weekLabel} valueFormat={(v) => `${v} ${v === 1 ? 'Getränk' : 'Getränke'}`} />} />
-        <Bar isAnimationActive={false} dataKey="drinks" name="Alkohol" fill="var(--series-4)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+        <Bar isAnimationActive={false} dataKey="drinks" name="Alkohol" fill="var(--series-4)" radius={[6, 6, 6, 6]} maxBarSize={22} />
       </BarChart>
     </ResponsiveContainer>
   )
@@ -66,8 +67,8 @@ export function WeeklyTimeChart({ data }: { data: { week: string; run: number; b
               fill={s.color}
               stroke="var(--surface)"
               strokeWidth={1}
-              maxBarSize={28}
-              radius={i === used.length - 1 ? [4, 4, 0, 0] : 0}
+              maxBarSize={22}
+              radius={i === used.length - 1 ? [6, 6, 0, 0] : 0}
             />
           ))}
         </BarChart>
@@ -132,17 +133,54 @@ export function HrvChart({ data }: { data: { date: string; hrv: number | null; b
   )
 }
 
-export function SimpleLineChart({ data, unit, name, height = 160 }: { data: { date: string; value: number | null }[]; unit: string; name: string; height?: number }) {
+export function SimpleLineChart({ data, unit, name, height = 160, color = 'var(--series-1)' }: { data: { date: string; value: number | null }[]; unit: string; name: string; height?: number; color?: string }) {
+  const id = useId().replace(/:/g, '')
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
+        <defs>
+          <linearGradient id={id} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={color} stopOpacity={0.28} />
+            <stop offset="1" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
         {grid}
         <XAxis dataKey="date" tickFormatter={shortDate} {...axis} minTickGap={24} />
         <YAxis {...axis} width={44} domain={[(m: number) => Math.floor(m - 1), (m: number) => Math.ceil(m + 1)]} allowDecimals={false} />
         <Tooltip cursor={lineCursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => `${v.toLocaleString('de-DE')} ${unit}`} />} />
-        <Line isAnimationActive={false} dataKey="value" name={name} stroke="var(--series-1)" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2 }} connectNulls />
-      </LineChart>
+        <Area
+          isAnimationActive={false}
+          type="monotone"
+          dataKey="value"
+          name={name}
+          stroke={color}
+          strokeWidth={2}
+          fill={`url(#${id})`}
+          dot={false}
+          activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2 }}
+          connectNulls
+        />
+      </AreaChart>
     </ResponsiveContainer>
+  )
+}
+
+/** Laufzeit pro Woche: locker (Zone 1–3) gegen hart (Zone 4–5). */
+export function IntensityChart({ data }: { data: { week: string; easy: number; hard: number }[] }) {
+  return (
+    <>
+      <ResponsiveContainer width="100%" height={170}>
+        <BarChart data={data} margin={{ top: 8, right: 0, left: -12, bottom: 0 }}>
+          {grid}
+          <XAxis dataKey="week" tickFormatter={shortDate} {...axis} minTickGap={16} />
+          <YAxis {...axis} width={44} tickFormatter={(v) => `${v}h`} />
+          <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={weekLabel} valueFormat={(v) => hoursMin(v * 3600)} />} />
+          <Bar isAnimationActive={false} dataKey="easy" name="Locker (Z1–3)" stackId="i" fill="var(--zone-2)" stroke="var(--surface)" strokeWidth={1} maxBarSize={22} />
+          <Bar isAnimationActive={false} dataKey="hard" name="Hart (Z4–5)" stackId="i" fill="var(--series-2)" stroke="var(--surface)" strokeWidth={1} maxBarSize={22} radius={[6, 6, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+      <Legend items={[{ label: 'Locker (Zone 1–3)', color: 'var(--zone-2)' }, { label: 'Hart (Zone 4–5)', color: 'var(--series-2)' }]} />
+    </>
   )
 }
 
@@ -154,9 +192,9 @@ export function ZoneBar({ zones }: { zones: (number | null)[] }) {
   if (!total) return null
   return (
     <div>
-      <div className="flex h-3 gap-0.5 overflow-hidden rounded-full">
+      <div className="flex h-2.5 gap-1">
         {zones.map((z, i) =>
-          z ? <div key={i} style={{ width: `${(z / total) * 100}%`, background: ZONE_COLORS[i] }} title={`Zone ${i + 1}: ${Math.round((z / total) * 100)} %`} /> : null,
+          z ? <div key={i} className="rounded-full" style={{ width: `${(z / total) * 100}%`, background: ZONE_COLORS[i] }} title={`Zone ${i + 1}: ${Math.round((z / total) * 100)} %`} /> : null,
         )}
       </div>
       <div className="mt-2 grid grid-cols-5 text-center text-[11px] text-ink-2">
