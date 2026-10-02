@@ -23,6 +23,11 @@ export interface Activity {
   rpe?: number | null
   /** Puls-Drift: Effizienzverlust der 2. gegenüber der 1. Hälfte in % (aus den Runden). */
   decoupling_pct?: number | null
+  /** Temperatur und Taupunkt in der Mitte der Einheit (Open-Meteo, Migration 0011). */
+  temp_c?: number | null
+  dew_point_c?: number | null
+  /** Steigungsbereinigung: Pace × Faktor = Pace auf flacher Strecke bei gleicher Anstrengung. */
+  gap_factor?: number | null
 }
 
 export interface DailyMetrics {

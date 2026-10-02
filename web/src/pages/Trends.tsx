@@ -11,6 +11,7 @@ import type { DrinksByDate, GymByDate } from '../lib/dailyLog'
 import { addDays } from '../lib/plan/dates'
 import { readinessSeries } from '../lib/readiness'
 import type { Dataset } from '../lib/types'
+import { WeekReviewButton } from './WeekReview'
 
 type Range = '4w' | '3m' | '6m'
 const RANGE_DAYS: Record<Range, number> = { '4w': 28, '3m': 91, '6m': 182 }
@@ -60,12 +61,13 @@ export function Trends({ data, drinks, gym, plan }: { data: Dataset; drinks: Dri
   const formRace = raceDay ? fitness.at(-1) : undefined
 
   // Aerobe Effizienz lockerer Läufe (ab 30 min, kaum anaerob): Meter pro Herzschlag, Wochenschnitt.
+  // Mit steigungsbereinigter Pace, damit hügelige Strecken den Trend nicht verzerren.
   const effWeeks = weeks.map((w) => ({ date: w.week, sum: 0, n: 0 }))
   for (const a of data.activities) {
     if (sportGroup(a.sport) !== 'run' || !a.avg_hr || !a.avg_speed_mps || (a.duration_s ?? 0) < 1800 || (a.anaerobic_te ?? 0) >= 1.5) continue
     const row = effWeeks.find((x) => x.date === weekStart(a.local_date))
     if (row) {
-      row.sum += (a.avg_speed_mps * 60) / a.avg_hr
+      row.sum += (a.avg_speed_mps * (a.gap_factor ?? 1) * 60) / a.avg_hr
       row.n++
     }
   }
@@ -84,6 +86,7 @@ export function Trends({ data, drinks, gym, plan }: { data: Dataset; drinks: Dri
 
   return (
     <div className="page-in space-y-3">
+      {plan && <WeekReviewButton data={data} plan={plan} log={{ drinks, gym: gym ?? {} }} />}
       <div>
         <Segmented
           value={range}
@@ -158,13 +161,13 @@ export function Trends({ data, drinks, gym, plan }: { data: Dataset; drinks: Dri
           >
             {effVals.length >= 2 && (
               <>
-                <div className="text-xs font-medium text-ink-2">Meter pro Herzschlag bei lockeren Läufen (steigend = fitter)</div>
+                <div className="text-xs font-medium text-ink-2">Meter pro Herzschlag bei lockeren Läufen, Steigung herausgerechnet (steigend = fitter)</div>
                 <EfficiencyChart data={efficiency} />
               </>
             )}
             {drift.length > 0 ? (
               <>
-                <div className="mt-3 text-xs font-medium text-ink-2">Puls-Drift pro Lauf ab 40 min (unter 5 % = stabile Grundlage)</div>
+                <div className="mt-3 text-xs font-medium text-ink-2">Puls-Drift pro Lauf ab 30 min (unter 5 % = stabile Grundlage)</div>
                 <DriftChart data={drift} />
               </>
             ) : (

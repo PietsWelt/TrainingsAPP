@@ -18,6 +18,8 @@ import { ProposalCard, ReadinessCard } from './TodayReadiness'
 import { CheckInCard } from './CheckIn'
 import { FeedbackCard } from './PlanFeedback'
 import { MobilityCard } from './Mobility'
+import { HeatCard } from './Heat'
+import { WeekReviewCard } from './WeekReview'
 
 function garminStatus(score: number): { status: Status; text: string } {
   if (score >= 75) return { status: 'good', text: 'Bereit für Belastung' }
@@ -55,8 +57,10 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
       {own && <ReadinessCard r={own} garmin={readiness} />}
       <ProposalCard plan={plan} r={own} today={today} log={log} />
       <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
+      <HeatCard workout={plan.workouts.find((w) => w.date === today && w.sport === 'run' && w.status === 'planned')} />
       <FeedbackCard plan={plan} today={today} activities={data.activities} />
       <MobilityCard activities={data.activities} today={today} />
+      <WeekReviewCard data={data} plan={plan} log={log} />
       {!own && readiness != null && (
         <Card className="p-5">
           <div className="flex items-center gap-5">

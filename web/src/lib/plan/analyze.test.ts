@@ -62,3 +62,21 @@ describe('shiftPaces', () => {
     expect(changed[0].description).toMatch(/\d:\d\d\/km/)
   })
 })
+
+describe('Hitze und Hügel', () => {
+  const w = { sport: 'run', kind: 'easy' } as PlanWorkout
+  const hot = (extra: Partial<Activity>) =>
+    ({ id: 1, sport: 'running', hr_zones_s: [0, 1200, 1200, 900, 0], aerobic_te: 3, ...extra }) as Activity
+  it('zu hart bei Hitze wird passend, ohne Tempo-Änderung', () => {
+    expect(analyzeRun(w, hot({}))?.verdict).toBe('hard')
+    const r = analyzeRun(w, hot({ temp_c: 27, dew_point_c: 18 }))
+    expect(r?.verdict).toBe('ok')
+    expect(r?.paceShift).toBe(0)
+    expect(r?.reasons.at(-1)).toMatch(/27 °C/)
+  })
+  it('auch auf hügeliger Strecke', () => {
+    const r = analyzeRun(w, hot({ gap_factor: 1.06 }))
+    expect(r?.verdict).toBe('ok')
+    expect(r?.reasons.at(-1)).toMatch(/hügelig/)
+  })
+})

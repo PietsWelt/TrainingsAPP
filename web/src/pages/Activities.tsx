@@ -4,6 +4,7 @@ import { ZoneBar } from '../components/ZoneBar'
 import { Sheet } from '../components/Sheet'
 import { Card, Segmented, SportIcon } from '../components/ui'
 import { dateLabel, duration, hoursMin, km, speed, sportGroup, sportLabel, weekStart, type SportGroup } from '../lib/format'
+import { heatPct } from '../lib/heat'
 import type { Activity } from '../lib/types'
 
 type Filter = 'all' | SportGroup
@@ -70,6 +71,20 @@ export function Activities({ activities, onOpen }: { activities: Activity[]; onO
   )
 }
 
+/** Wetter und Steigung, sobald der Sync sie ergänzt hat. */
+function conditionRows(a: Activity): [string, string][] {
+  const rows: [string, string][] = []
+  if (a.temp_c != null && a.dew_point_c != null) {
+    const pct = heatPct(a.temp_c, a.dew_point_c)
+    rows.push(['Wetter', `${Math.round(a.temp_c)} °C, Taupunkt ${Math.round(a.dew_point_c)} °C`])
+    rows.push(['Hitze-Effekt', pct > 0 ? `etwa ${pct.toLocaleString('de-DE')} % langsamer` : 'keiner'])
+  }
+  if (a.gap_factor != null && a.avg_speed_mps && sportGroup(a.sport) === 'run' && Math.abs(a.gap_factor - 1) >= 0.01) {
+    rows.push(['Pace flach gerechnet', speed(a.avg_speed_mps * a.gap_factor, a.sport)])
+  }
+  return rows
+}
+
 export function ActivityDetail({ activity: a, onClose }: { activity: Activity; onClose: () => void }) {
   const g = sportGroup(a.sport)
   const rows: [string, string][] = [
@@ -82,6 +97,7 @@ export function ActivityDetail({ activity: a, onClose }: { activity: Activity; o
     ['Anaerober Effekt', a.anaerobic_te != null ? a.anaerobic_te.toFixed(1).replace('.', ',') : '–'],
     ...(a.decoupling_pct != null ? ([['Puls-Drift', `${a.decoupling_pct.toLocaleString('de-DE')} % ${a.decoupling_pct <= 5 ? '(stabil)' : '(hoch)'}`]] as [string, string][]) : []),
     ['Kalorien', a.calories != null ? `${Math.round(a.calories)} kcal` : '–'],
+    ...conditionRows(a),
   ]
   return (
     <Sheet onClose={onClose}>
