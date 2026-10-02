@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { SkeletonPage } from './components/Skeleton'
 import { Toaster } from './components/Toast'
 import { toast } from './lib/toast'
+import { tap } from './lib/haptics'
 import { usePullToRefresh } from './lib/usePullToRefresh'
+import { useSwipeTabs } from './lib/useSwipeTabs'
 import { useDailyLog } from './lib/useDailyLog'
 import type { Session } from '@supabase/supabase-js'
 import { loadDataset, syncAndWait } from './lib/data'
@@ -18,6 +20,7 @@ import { Today } from './pages/Today'
 import { Trends } from './pages/Trends'
 
 type Tab = 'today' | 'plan' | 'trends' | 'activities'
+const TABS: Tab[] = ['today', 'plan', 'trends', 'activities']
 const TITLES: Record<Tab, string> = { today: 'Heute', plan: 'Plan', trends: 'Trends', activities: 'Aktivitäten' }
 
 export default function App() {
@@ -58,13 +61,22 @@ function Main() {
   useEffect(() => {
     void refresh()
   }, [refresh])
-  const ptr = usePullToRefresh(refresh)
+  // Runterziehen startet wie der Knopf oben einen echten Garmin-Sync, nicht nur ein Neuladen.
+  const ptr = usePullToRefresh(() => {
+    if (!syncing) void syncNow()
+    return Promise.resolve()
+  })
 
   function selectTab(t: Tab) {
     // Erneut auf den aktiven Tab tippen springt nach oben, ein Wechsel startet oben.
     window.scrollTo({ top: 0, behavior: t === tab ? 'smooth' : 'auto' })
     setTab(t)
   }
+
+  useSwipeTabs(TABS, tab, (t) => {
+    tap()
+    selectTab(t)
+  })
 
   // Beim Zurückkehren in die App neu laden (z.B. nach einem Lauf).
   useEffect(() => {
@@ -75,6 +87,7 @@ function Main() {
 
   async function syncNow() {
     setSyncing(true)
+    toast('Sync läuft. Dauert etwa eine halbe Minute.')
     try {
       const run = await syncAndWait()
       await refresh()
