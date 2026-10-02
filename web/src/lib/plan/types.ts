@@ -51,6 +51,8 @@ export interface WorkStep {
   m?: number
   /** Zieltempo in s/km (die Uhr bekommt ein Fenster von ±5 s). */
   pace?: number
+  /** Langsame Grenze, falls das Ziel ein Bereich ist (lockere Läufe): dann gilt pace … pace_slow. */
+  pace_slow?: number
   note?: string
 }
 export interface RepeatStep {

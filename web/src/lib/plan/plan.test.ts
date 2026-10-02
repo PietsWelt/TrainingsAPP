@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoComplete, giveFeedback, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
+import { autoComplete, fillSteps, giveFeedback, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
 import { stepLines } from './labels'
 import { generatePlan, pacesFor, phasesFor, volumesFor } from './generate'
@@ -237,8 +237,20 @@ describe('steps for the watch', () => {
     expect(block && block.type === 'repeat' && block.steps[0].pace).toBeGreaterThan(200)
     expect(stepLines(iv.steps!)[1]).toMatch(/^\d+ × 1 km @ \d:\d\d\/km, 2 min Pause$/)
   })
-  it('leaves easy runs as a single distance', () => {
-    expect(plan.find((w) => w.kind === 'easy')?.steps).toBeUndefined()
+  it('gives easy runs one step with the easy pace range', () => {
+    const e = plan.find((w) => w.kind === 'easy')!
+    expect(e.steps).toHaveLength(1)
+    const s = e.steps![0]
+    expect(s.type === 'run' && s.m).toBe(Math.round(e.distance_km! * 10) * 100)
+    expect(s.type === 'run' && s.pace! < s.pace_slow!).toBe(true)
+  })
+  it('fills in steps for plans made before steps existed', () => {
+    const old = plan.map((w) => ({ ...w, steps: null, distance_km: w.distance_km && w.distance_km * 0.9 }))
+    const filled = fillSteps(old, plan, TODAY)
+    expect(filled.length).toBe(plan.filter((w) => w.steps?.length && w.sport === 'run').length)
+    const easy = filled.find((w) => w.kind === 'easy')!
+    expect(easy.steps![0].type === 'run' && easy.steps![0].m).toBe(Math.round(easy.distance_km! * 10) * 100)
+    expect(fillSteps(filled.concat(old.filter((w) => !filled.some((f) => f.id === w.id))), plan, TODAY)).toHaveLength(0)
   })
   it('scales only the easy part when a run gets shorter', () => {
     const long: PlanWorkout = { ...plan.find((w) => w.kind === 'long')!, steps: [{ type: 'run', m: 16000 }, { type: 'run', m: 4000, pace: 300 }] }

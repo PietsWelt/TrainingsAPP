@@ -169,6 +169,8 @@ const work = (x: Omit<WorkStep, 'type'>): WorkStep => ({ type: 'run', ...x })
 const jog = (x: Omit<WorkStep, 'type'>): WorkStep => ({ type: 'recover', note: 'Traben', ...x })
 const repeat = (times: number, ...steps: WorkStep[]): RepeatStep => ({ type: 'repeat', times, steps })
 const pz = (z: Exclude<Zone, 'easy'>, p: Paces | null) => (p ? Math.round(p[z]) : undefined)
+const easyPace = (p: Paces | null) => (p ? { pace: Math.round(p.easy[0]), pace_slow: Math.round(p.easy[1]) } : {})
+const meters = (km: number) => Math.round(km * 10) * 100
 
 function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null): Draft {
   const short = type === '5k' || type === '10k'
@@ -180,7 +182,7 @@ function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: num
     key_session: false,
     title: 'Lockerer Lauf mit Steigerungen',
     description: `Locker (${at('easy', p)}), am Ende ${n} × 20 s Steigerungen.`,
-    steps: [work({ m: Math.max(1000, Math.round((km - 0.5) * 10) * 100), note: 'Locker' }), repeat(n, work({ time_s: 20, note: 'Steigerung' }), jog({ time_s: 60 })), CD],
+    steps: [work({ m: Math.max(1000, meters(km - 0.5)), note: 'Locker', ...easyPace(p) }), repeat(n, work({ time_s: 20, note: 'Steigerung' }), jog({ time_s: 60 })), CD],
   })
   if (phase === 'base') {
     if (slot === 'Q1') {
@@ -283,16 +285,20 @@ function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: num
 function runLong(type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null): Draft {
   let description = `Ruhig und gleichmäßig (${at('easy', p)}).`
   let steps: Step[] | undefined
-  const total = Math.round(km * 10) * 100
-  if (phase === 'build' && type !== '5k') description += ' Die letzten 2 km etwas zügiger.'
+  const total = meters(km)
+  steps = p ? [work({ m: total, note: 'Ruhig', ...easyPace(p) })] : undefined
+  if (phase === 'build' && type !== '5k') {
+    description += ' Die letzten 2 km etwas zügiger.'
+    steps = [work({ m: Math.max(1000, total - 2000), note: 'Ruhig', ...easyPace(p) }), work({ m: 2000, note: 'Etwas zügiger' })]
+  }
   if (phase === 'peak' && type === 'marathon') {
     const fast = 6 + 2 * Math.min(pw, 2)
     description = `Ruhig beginnen, die letzten ${fast} km im ${at('marathon', p)}.`
-    steps = [work({ m: Math.max(1000, total - fast * 1000), note: 'Ruhig' }), work({ m: fast * 1000, pace: pz('marathon', p), note: 'Marathontempo' })]
+    steps = [work({ m: Math.max(1000, total - fast * 1000), note: 'Ruhig', ...easyPace(p) }), work({ m: fast * 1000, pace: pz('marathon', p), note: 'Marathontempo' })]
   }
   if (phase === 'peak' && type === 'half') {
     description = `Ruhig beginnen, die letzten 4 km im ${at('race', p)}.`
-    steps = [work({ m: Math.max(1000, total - 4000), note: 'Ruhig' }), work({ m: 4000, pace: pz('race', p), note: 'Wettkampftempo' })]
+    steps = [work({ m: Math.max(1000, total - 4000), note: 'Ruhig', ...easyPace(p) }), work({ m: 4000, pace: pz('race', p), note: 'Wettkampftempo' })]
   }
   return { sport: 'run', kind: 'long', title: 'Langer Lauf', description, distance_km: r1(km), duration_min: runMinutes(km, p, 1.03), key_session: true, steps }
 }
@@ -306,6 +312,8 @@ function runEasy(km: number, p: Paces | null, recovery = false): Draft {
     distance_km: r1(km),
     duration_min: runMinutes(km, p, recovery ? 1.08 : 1),
     key_session: false,
+    // Regeneration ohne Tempovorgabe: lieber langsamer als die Uhr verlangt.
+    steps: p && !recovery ? [work({ m: meters(km), note: 'Locker', ...easyPace(p) })] : undefined,
   }
 }
 
