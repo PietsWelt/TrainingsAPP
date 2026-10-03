@@ -4,7 +4,8 @@ Mit Brustgurt und "HRV aufzeichnen" stehen in der FIT-Datei die Abstände zwisch
 Herzschlägen (RR-Intervalle). Daraus wird DFA-alpha1 berechnet, ein Maß dafür, wie "geordnet" der
 Herzschlag schwankt. Bei lockerer Belastung liegt der Wert um 1, oberhalb der aeroben Schwelle fällt er
 unter 0,75 (Rogers et al. 2021, Gronwald et al. 2020). Der Puls, bei dem der Wert 0,75 kreuzt, ist eine
-Schätzung der aeroben Schwelle.
+Schätzung der aeroben Schwelle. Wo er 0,5 kreuzt, liegt etwa die zweite Schwelle (Laktatschwelle,
+Rogers et al. 2021, J Funct Morphol Kinesiol).
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ STEP_S = 30
 # Fenster mit mehr als 5 % korrigierten Schlägen sind unzuverlässig.
 MAX_ARTIFACTS = 0.05
 AET_ALPHA = 0.75
+LT_ALPHA = 0.5
 HIST_BIN = 5
 
 
@@ -171,11 +173,14 @@ def _fit_line(xs: list[float], ys: list[float]) -> tuple[float, float, float] | 
     return my - b * mx, b, sxy / math.sqrt(sxx * syy)
 
 
-def threshold(ws: list[dict[str, float]]) -> tuple[float | None, float | None]:
-    """Puls und Tempo (m/s), bei denen alpha1 die 0,75 kreuzt. Nur wenn der Lauf das hergibt:
-    mindestens 10 Fenster, 15 Schläge Pulsspanne, klarer Zusammenhang und die 0,75 innerhalb der Spanne."""
+def crossing(ws: list[dict[str, float]], alpha: float, reached: int = 0) -> tuple[float | None, float | None]:
+    """Puls und Tempo (m/s), bei denen alpha1 den Wert `alpha` kreuzt. Nur wenn der Lauf das hergibt:
+    mindestens 10 Fenster, 15 Schläge Pulsspanne, klarer Zusammenhang und der Kreuzungspunkt innerhalb der Spanne.
+    `reached`: so viele Fenster müssen den Wert tatsächlich fast erreicht haben (höchstens 0,05 darüber)."""
     ws = [w for w in ws if 0.2 <= w["alpha1"] <= 1.6]
     if len(ws) < 10:
+        return None, None
+    if sum(w["alpha1"] <= alpha + 0.05 for w in ws) < reached:
         return None, None
     hrs = [w["hr"] for w in ws]
     if max(hrs) - min(hrs) < 15:
@@ -183,7 +188,7 @@ def threshold(ws: list[dict[str, float]]) -> tuple[float | None, float | None]:
     line = _fit_line(hrs, [w["alpha1"] for w in ws])
     if not line or line[1] >= 0 or line[2] > -0.5:
         return None, None
-    hr = (AET_ALPHA - line[0]) / line[1]
+    hr = (alpha - line[0]) / line[1]
     if not min(hrs) <= hr <= max(hrs):
         return None, None
     moving = [w for w in ws if w["speed"] > 1]
@@ -193,6 +198,17 @@ def threshold(ws: list[dict[str, float]]) -> tuple[float | None, float | None]:
         if sl and sl[2] >= 0.5:
             speed = sl[0] + sl[1] * hr
     return round(hr, 1), round(speed, 3) if speed else None
+
+
+def threshold(ws: list[dict[str, float]]) -> tuple[float | None, float | None]:
+    """Aerobe Schwelle: alpha1 = 0,75."""
+    return crossing(ws, AET_ALPHA)
+
+
+def lactate_threshold(ws: list[dict[str, float]]) -> tuple[float | None, float | None]:
+    """Laktatschwelle: alpha1 = 0,5. Nur wenn mindestens 3 Fenster (1,5 min) wirklich so tief waren,
+    sonst wäre es eine Verlängerung der Geraden ins Ungewisse."""
+    return crossing(ws, LT_ALPHA, reached=3)
 
 
 def hr_hist(records: list[tuple[float, int | None, float | None]]) -> dict[str, int] | None:
@@ -219,4 +235,5 @@ def analyze(items: Iterable[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
         if ws:
             row["dfa_a1"] = round(sum(w["alpha1"] for w in ws) / len(ws), 2)
             row["aet_hr"], row["aet_speed_mps"] = threshold(ws)
+            row["lt_hr"], row["lt_speed_mps"] = lactate_threshold(ws)
     return row

@@ -37,6 +37,16 @@ export interface Activity {
   /** Aus diesem Lauf geschätzte aerobe Schwelle (bpm) und das Tempo dort (m/s). */
   aet_hr?: number | null
   aet_speed_mps?: number | null
+  /** Aus diesem Lauf geschätzte Laktatschwelle (alpha1 = 0,5, Migration 0013) und das Tempo dort. */
+  lt_hr?: number | null
+  lt_speed_mps?: number | null
+}
+
+/** Garmins Laktatschwelle (Migration 0013), je Tag, an dem Garmin sie neu bestimmt hat. */
+export interface GarminLactate {
+  date: string
+  hr: number
+  speed_mps: number | null
 }
 
 export interface DailyMetrics {
@@ -76,6 +86,8 @@ export interface Dataset {
   lastSync: SyncRun | null
   /** Bestzeiten je Strecke (siehe records.ts). */
   records?: Best[]
+  /** Garmins Laktatschwelle, älteste zuerst. */
+  lactate?: GarminLactate[]
   /** Garmins Rennzeit-Prognose pro Tag (Sekunden). */
   predictions?: RacePrediction[]
   /** Rennen aus dem Garmin-Kalender (Migration 0009). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { personalAet, shareAbove } from './aet'
+import { personalAet, personalLt, shareAbove } from './aet'
 import type { Activity } from './types'
 
 const run = (local_date: string, aet_hr: number | null, aet_speed_mps: number | null = null) => ({ local_date, aet_hr, aet_speed_mps }) as Activity
@@ -23,5 +23,16 @@ describe('shareAbove', () => {
     expect(shareAbove({ '140': 100, '150': 100 }, 150)).toBe(0.5)
     expect(shareAbove({ '140': 100, '150': 100 }, 142)).toBeCloseTo((60 + 100) / 200)
     expect(shareAbove(null, 150)).toBeNull()
+  })
+})
+
+describe('personalLt', () => {
+  it('rechnet wie die aerobe Schwelle, nur mit lt_hr', () => {
+    const acts = [{ local_date: '2026-09-01', lt_hr: 170, lt_speed_mps: 3.5 }, { local_date: '2026-09-08', lt_hr: 174, lt_speed_mps: null }, { local_date: '2026-09-09', aet_hr: 150 }] as Activity[]
+    const lt = personalLt(acts)!
+    expect(lt.hr).toBe(172)
+    expect(lt.speed).toBe(3.5)
+    expect(lt.n).toBe(2)
+    expect(lt.date).toBe('2026-09-08')
   })
 })

@@ -1,4 +1,4 @@
-// Aerobe Schwelle aus DFA-alpha1 (Brustgurt mit „HRV aufzeichnen“, Auswertung im Sync, sync/fitfile.py).
+// Aerobe Schwelle (alpha1 = 0,75) und Laktatschwelle (alpha1 = 0,5) aus DFA-alpha1 (Brustgurt mit „HRV aufzeichnen“, Auswertung im Sync, sync/fitfile.py).
 // Ein einzelner Lauf ist eine wackelige Schätzung. Deshalb zählt der Median der letzten bis zu 5
 // Schätzungen aus 90 Tagen: Ausreißer fallen so kaum ins Gewicht.
 
@@ -22,19 +22,28 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
 }
 
-/** Die Schätzung zum Tag `until` (Standard: neuester Lauf), aus den 90 Tagen davor. */
-export function personalAet(activities: Activity[] | undefined, until?: string): Aet | null {
+type Field = 'aet' | 'lt'
+
+function estimate(activities: Activity[] | undefined, field: Field, until?: string): Aet | null {
+  const hrOf = (a: Activity) => (field === 'aet' ? a.aet_hr : a.lt_hr)
+  const speedOf = (a: Activity) => (field === 'aet' ? a.aet_speed_mps : a.lt_speed_mps)
   const acts = activities ?? []
   const ref = until ?? acts.reduce((m, a) => (a.local_date > m ? a.local_date : m), '')
   const from = addDays(ref, -90)
   const est = acts
-    .filter((a) => a.aet_hr != null && a.local_date <= ref && a.local_date >= from)
+    .filter((a) => hrOf(a) != null && a.local_date <= ref && a.local_date >= from)
     .sort((a, b) => b.local_date.localeCompare(a.local_date))
     .slice(0, 5)
   if (!est.length) return null
-  const speeds = est.map((a) => a.aet_speed_mps).filter((x): x is number => x != null)
-  return { hr: Math.round(median(est.map((a) => a.aet_hr!))), speed: speeds.length ? median(speeds) : null, n: est.length, date: est[0].local_date }
+  const speeds = est.map(speedOf).filter((x): x is number => x != null)
+  return { hr: Math.round(median(est.map((a) => hrOf(a)!))), speed: speeds.length ? median(speeds) : null, n: est.length, date: est[0].local_date }
 }
+
+/** Aerobe Schwelle zum Tag `until` (Standard: neuester Lauf), aus den 90 Tagen davor. */
+export const personalAet = (activities: Activity[] | undefined, until?: string) => estimate(activities, 'aet', until)
+
+/** Laktatschwelle aus alpha1 = 0,5, gleich gerechnet wie die aerobe Schwelle. */
+export const personalLt = (activities: Activity[] | undefined, until?: string) => estimate(activities, 'lt', until)
 
 /**
  * Anteil der Zeit über `hr` aus der Puls-Verteilung (5er-Bereiche). Ein angeschnittener Bereich

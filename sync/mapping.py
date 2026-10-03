@@ -169,6 +169,26 @@ def prediction_row(day: str, p: dict[str, Any] | list[Any] | None) -> dict[str, 
     return row if any(v for k, v in row.items() if k != "date") else None
 
 
+def lactate_row(lt: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Garmins Laktatschwelle aus get_lactate_threshold(latest=True).
+
+    Garmin speichert das Tempo in Zehntel-m/s (0,34 = 3,4 m/s = 4:54 /km). Echte Laufwerte liegen bei
+    2–7 m/s, deshalb wird alles unter 1 mit 10 multipliziert.
+    """
+    sh = (lt or {}).get("speed_and_heart_rate") or {}
+    hr = as_int(sh.get("heartRate"))
+    speed = sh.get("speed")
+    day = str(sh.get("calendarDate") or "")[:10]
+    if len(day) != 10 or day[4] != "-" or not hr or not 100 <= hr <= 220:
+        return None
+    if isinstance(speed, (int, float)) and speed > 0:
+        speed = speed * 10 if speed < 1 else float(speed)
+        speed = round(speed, 3) if 1.5 <= speed <= 7 else None
+    else:
+        speed = None
+    return {"date": day, "hr": hr, "speed_mps": speed}
+
+
 _UNIT_M = {"meter": 1.0, "kilometer": 1000.0, "mile": 1609.344}
 
 
