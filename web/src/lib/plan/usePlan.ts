@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { Activity, DailyMetrics } from '../types'
-import { autoComplete, fillSteps, giveFeedback, skipWorkout } from './adapt'
+import { autoComplete, fillSteps, giveFeedback, isPartial, skipWorkout } from './adapt'
 import { analyzeRun, merge, shiftPaces } from './analyze'
 import { catchUp, reentry } from './catchup'
 import { sportGroup } from '../format'
@@ -43,6 +43,24 @@ function friendly(e: unknown): string {
 const OVERLOAD_KEY = 'overload.applied'
 // Feste leere Liste: ein neues [] bei jedem Aufruf würde den Plan endlos neu laden.
 const NO_METRICS: DailyMetrics[] = []
+// Aktivitäten, deren automatischen Haken du entfernt hast: werden keiner Einheit mehr zugeordnet.
+const RELEASED_KEY = 'plan.released'
+function readReleased(): number[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(RELEASED_KEY) ?? '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function release(id: number) {
+  try {
+    localStorage.setItem(RELEASED_KEY, JSON.stringify([...readReleased().filter((x) => x !== id), id].slice(-50)))
+  } catch {
+    // ohne Speicher kann der Haken beim nächsten Laden zurückkommen
+  }
+}
+
 function readApplied(): { date: string; level: number } | null {
   try {
     return JSON.parse(localStorage.getItem(OVERLOAD_KEY) ?? 'null')
@@ -63,7 +81,9 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
     try {
       const [ev, ws] = await Promise.all([planStore.listEvents(), planStore.listWorkouts()])
       const today = day
-      const done = activities ? autoComplete(ws, activities, today) : []
+      const released = new Set(readReleased())
+      const usable = activities.filter((a) => !released.has(a.id))
+      const done = autoComplete(ws, usable, today)
       // Ablauf für die Uhr bei älteren Plänen nachtragen (Plan ab heute neu berechnen, nur Abläufe übernehmen).
       const filled = hasColumn('steps')
         ? ev
@@ -78,7 +98,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
       // Verpasstes auslassen oder als ersetzt werten, nach einer Pause sanft wieder einsteigen.
       let tidy: PlanWorkout[] = []
       if (activities) {
-        const cu = catchUp(current, activities, today, new Date().getHours())
+        const cu = catchUp(current, usable, today, new Date().getHours())
         current = current.map((w) => cu.changed.find((c) => c.id === w.id) ?? w)
         const re = reentry(current, activities, today)
         current = current.map((w) => re.changed.find((c) => c.id === w.id) ?? w)
@@ -91,6 +111,8 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
         for (const w of current) {
           if (w.status !== 'done' || w.feedback || w.activity_id == null || w.date < addDays(today, -3)) continue
           const act = activities.find((a) => a.id === w.activity_id)
+          // Deutlich kürzer als geplant: sagt nichts über das Tempo der vollen Einheit, also nicht anpassen.
+          if (isPartial(w, act)) continue
           // Ersatzsport (z.B. Rad statt Lauf) wird nicht als Lauf ausgewertet.
           const res = act && sportGroup(act.sport) === w.sport && analyzeRun(w, act, activities)
           if (!res) continue
@@ -163,6 +185,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
       await reload()
     },
     async setStatus(w, status) {
+      if (status !== 'done' && w.activity_id != null) release(w.activity_id)
       const changed = { ...w, status, activity_id: status === 'done' ? w.activity_id : null }
       await planStore.updateWorkouts([changed])
       apply([changed])
@@ -177,7 +200,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
       const { changed, message } = giveFeedback(workouts, w.id, feedback, today)
       // Weichst du von der automatischen Auswertung ab, wird deren Tempo-Anpassung zurückgenommen.
       const act = w.activity_id != null ? activities?.find((a) => a.id === w.activity_id) : undefined
-      const auto = act ? analyzeRun(w, act, activities) : null
+      const auto = act && !isPartial(w, act) ? analyzeRun(w, act, activities) : null
       const undo = auto && auto.paceShift && w.feedback === auto.verdict && feedback !== auto.verdict ? shiftPaces(workouts, w, auto.group, -auto.paceShift, today) : []
       const all = merge(changed, undo)
       await planStore.updateWorkouts(all)

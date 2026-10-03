@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoComplete, fillSteps, giveFeedback, legsProposal, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
+import { autoComplete, coverage, fillSteps, isPartial, giveFeedback, legsProposal, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
 import { stepLines } from './labels'
 import { generatePlan, pacesFor, phasesFor, volumesFor } from './generate'
@@ -173,6 +173,54 @@ describe('autoComplete and progress', () => {
     const changed = autoComplete(plan, acts, TODAY)
     expect(changed.map((c) => c.id)).toEqual(['a'])
     expect(changed[0].activity_id).toBe(9)
+  })
+
+  const run = (id: number, local_date: string, km: number, min: number) =>
+    ({ id, local_date, sport: 'running', distance_m: km * 1000, duration_s: min * 60 }) as never
+
+  it('marks a much shorter run as partial and counts it half', () => {
+    const plan = [wk({ id: 'long', date: '2026-10-01', kind: 'long', key_session: true, distance_km: 20, duration_min: 120 })]
+    const acts = [run(5, '2026-10-01', 3, 18)]
+    const [done] = autoComplete(plan, acts, TODAY)
+    expect(done.status).toBe('done')
+    expect(isPartial(done, acts[0])).toBe(true)
+    const p = progressOf([done], TODAY, acts)
+    expect(p.done).toBe(0)
+    expect(p.partial).toBe(1)
+  })
+
+  it('uses the better of time and distance, so slow runs still count fully', () => {
+    expect(coverage({ duration_min: 60, distance_km: 10 }, { duration_s: 60 * 60, distance_m: 5000 })).toBe(1)
+    expect(coverage({ duration_min: null, distance_km: null }, { duration_s: 600, distance_m: 2000 })).toBeNull()
+  })
+
+  it('picks the longest run when there are two on the same day', () => {
+    const plan = [wk({ id: 'a', date: '2026-10-01' })]
+    const [done] = autoComplete(plan, [run(1, '2026-10-01', 2, 12), run(2, '2026-10-01', 7, 40)], TODAY)
+    expect(done.activity_id).toBe(2)
+  })
+
+  it('takes over a session from the day before when the run is long enough', () => {
+    const plan = [wk({ id: 'tue', date: '2026-09-29', kind: 'intervals', key_session: true, duration_min: 50, distance_km: 9 })]
+    const [done] = autoComplete(plan, [run(3, '2026-09-30', 9, 50)], TODAY)
+    expect(done).toMatchObject({ id: 'tue', date: '2026-09-30', moved_from: '2026-09-29', status: 'done', activity_id: 3 })
+  })
+
+  it('does not take over a neighbouring session with a short run, from another week or onto a day with its own session', () => {
+    const tue = wk({ id: 'tue', date: '2026-09-29' })
+    expect(autoComplete([tue], [run(3, '2026-09-30', 2, 12)], TODAY)).toEqual([])
+    const sun = wk({ id: 'sun', date: '2026-09-27' })
+    expect(autoComplete([sun], [run(4, '2026-09-28', 7, 40)], TODAY)).toEqual([])
+    const wed = wk({ id: 'wed', date: '2026-09-30', status: 'skipped' })
+    expect(autoComplete([tue, wed], [run(5, '2026-09-30', 7, 40)], TODAY)[0]?.id).toBe('tue')
+    const wedDone = wk({ id: 'wed', date: '2026-09-30', status: 'done', activity_id: 9 })
+    expect(autoComplete([tue, wedDone], [run(9, '2026-09-30', 7, 40), run(6, '2026-09-30', 7, 40)], TODAY)).toEqual([])
+  })
+
+  it('can pull tomorrow\'s session forward to today', () => {
+    const plan = [wk({ id: 'sat', date: '2026-10-03' })]
+    const [done] = autoComplete(plan, [run(7, TODAY, 7, 40)], TODAY)
+    expect(done).toMatchObject({ id: 'sat', date: TODAY, moved_from: '2026-10-03' })
   })
 
   it('counts done sessions without the race', () => {

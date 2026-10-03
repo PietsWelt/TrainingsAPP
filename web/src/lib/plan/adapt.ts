@@ -3,7 +3,7 @@
 
 import { sportGroup } from '../format'
 import type { Activity } from '../types'
-import { addDays, mondayOf, WEEKDAY_LONG, weekday } from './dates'
+import { addDays, daysBetween, mondayOf, WEEKDAY_LONG, weekday } from './dates'
 import type { Readiness } from '../readiness'
 import type { Feedback, PlanWorkout, Step } from './types'
 
@@ -87,22 +87,81 @@ export function findSlot(plan: PlanWorkout[], w: PlanWorkout, today: string, rac
   return candidates[0]?.date ?? null
 }
 
-/** Hakt geplante Einheiten ab, zu denen es am selben Tag eine passende Garmin-Aktivität gibt. */
+/** Ab diesem Anteil der geplanten Zeit oder Strecke gilt eine Einheit als voll erledigt. */
+export const FULL_SHARE = 0.6
+
+/**
+ * Wie viel der geplanten Einheit die Aktivität abdeckt (1 = genau so lang wie geplant).
+ * Zählt der bessere Wert aus Zeit und Strecke, damit langsames oder schnelles Laufen nicht bestraft wird.
+ * `null`, wenn die Einheit keine Länge vorgibt.
+ */
+export function coverage(w: Pick<PlanWorkout, 'duration_min' | 'distance_km'>, a: Pick<Activity, 'duration_s' | 'distance_m'>): number | null {
+  const shares: number[] = []
+  if (w.duration_min && a.duration_s != null) shares.push(a.duration_s / 60 / w.duration_min)
+  if (w.distance_km && a.distance_m != null) shares.push(a.distance_m / 1000 / w.distance_km)
+  return shares.length ? Math.max(...shares) : null
+}
+
+/** Erledigt, aber deutlich kürzer als geplant (z.B. 3 km statt 12 km). */
+export function isPartial(w: PlanWorkout, a: Activity | undefined): boolean {
+  if (!a || w.status !== 'done' || w.sport === 'race' || sportGroup(a.sport) !== w.sport) return false
+  const c = coverage(w, a)
+  return c != null && c < FULL_SHARE
+}
+
+function fits(w: PlanWorkout, a: Activity): boolean {
+  const g = sportGroup(a.sport)
+  return w.sport === 'race' ? g === 'run' || a.sport.includes('multi') || a.sport.includes('triathlon') : g === w.sport
+}
+
+/**
+ * Hakt geplante Einheiten anhand der Garmin-Aktivitäten ab.
+ * 1. Gleicher Tag, gleiche Sportart: zählt immer, auch wenn sie kürzer war (dann „teilweise“, siehe `isPartial`).
+ *    Bei mehreren passenden Aktivitäten gewinnt die längste.
+ * 2. Aktivität an einem Tag ohne Einheit dieser Sportart: übernimmt eine offene Einheit vom Vortag oder
+ *    Folgetag derselben Woche (oder eine von dort verschobene), aber nur, wenn sie lang genug war.
+ *    Die Einheit wandert dann auf den Tag, an dem du wirklich trainiert hast.
+ */
 export function autoComplete(plan: PlanWorkout[], activities: Activity[], today: string): PlanWorkout[] {
   const used = new Set(plan.map((w) => w.activity_id).filter((x): x is number => x != null))
   const changed: PlanWorkout[] = []
+  const done = new Set<string>()
+  const len = (a: Activity) => a.duration_s ?? 0
+
   for (const w of plan) {
     if (w.status !== 'planned' || w.date > today) continue
-    const want = w.sport === 'race' ? null : w.sport
-    const match = activities.find((a) => {
-      if (a.local_date !== w.date || used.has(a.id)) return false
-      const g = sportGroup(a.sport)
-      return want ? g === want : g === 'run' || a.sport.includes('multi') || a.sport.includes('triathlon')
-    })
+    const match = activities
+      .filter((a) => a.local_date === w.date && !used.has(a.id) && fits(w, a))
+      .sort((a, b) => len(b) - len(a))[0]
     if (match) {
       used.add(match.id)
+      done.add(w.id)
       changed.push({ ...w, status: 'done', activity_id: match.id })
     }
+  }
+
+  // Einen Tag verrutscht: z.B. Dienstagslauf erst am Mittwoch gemacht.
+  const free = activities.filter((a) => !used.has(a.id) && a.local_date <= today && sportGroup(a.sport) !== 'other')
+  for (const a of [...free].sort((x, y) => x.local_date.localeCompare(y.local_date))) {
+    const d = a.local_date
+    const g = sportGroup(a.sport)
+    if (plan.some((w) => w.date === d && w.sport === g && w.status !== 'skipped')) continue
+    const near = (x: string | null) => x != null && Math.abs(daysBetween(d, x)) === 1
+    const candidates = plan.filter(
+      (w) =>
+        w.status === 'planned' &&
+        !done.has(w.id) &&
+        w.sport === g &&
+        mondayOf(w.date) === mondayOf(d) &&
+        (near(w.date) || (near(w.moved_from) && w.date > d)) &&
+        (coverage(w, a) ?? 0) >= FULL_SHARE,
+    )
+    // Lieber die verpasste Einheit von gestern als die von morgen.
+    const w = candidates.sort((x, y) => (x.moved_from ?? x.date).localeCompare(y.moved_from ?? y.date))[0]
+    if (!w) continue
+    used.add(a.id)
+    done.add(w.id)
+    changed.push({ ...w, date: d, moved_from: w.moved_from ?? w.date, status: 'done', activity_id: a.id })
   }
   return changed
 }
@@ -110,22 +169,26 @@ export function autoComplete(plan: PlanWorkout[], activities: Activity[], today:
 export interface Progress {
   total: number
   done: number
+  /** Erledigt, aber deutlich kürzer als geplant; zählt im Balken halb. */
+  partial: number
   skipped: number
   dueSoFar: number
   doneSoFar: number
   daysToRace: number | null
 }
 
-export function progressOf(plan: PlanWorkout[], today: string): Progress {
+export function progressOf(plan: PlanWorkout[], today: string, activities: Activity[] = []): Progress {
   const sessions = plan.filter((w) => w.sport !== 'race')
+  const partial = (w: PlanWorkout) => isPartial(w, activities.find((a) => a.id === w.activity_id))
   const race = plan.find((w) => w.sport === 'race')
   const due = sessions.filter((w) => w.date <= today)
   return {
     total: sessions.length,
-    done: sessions.filter((w) => w.status === 'done').length,
+    done: sessions.filter((w) => w.status === 'done' && !partial(w)).length,
+    partial: sessions.filter(partial).length,
     skipped: sessions.filter((w) => w.status === 'skipped').length,
     dueSoFar: due.length,
-    doneSoFar: due.filter((w) => w.status === 'done').length,
+    doneSoFar: due.filter((w) => w.status === 'done' && !partial(w)).length,
     daysToRace: race ? Math.round((Date.parse(race.date) - Date.parse(today)) / 86400_000) : null,
   }
 }
