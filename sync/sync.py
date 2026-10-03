@@ -19,7 +19,7 @@ from garminconnect import Garmin
 
 from db import Supabase
 from fitfile import analyze as analyze_fit, fit_bytes, frames
-from mapping import activity_row, daily_row, decoupling, gap_factor, pr_row, prediction_row, race_row
+from mapping import activity_row, daily_row, decoupling, gap_factor, lactate_row, pr_row, prediction_row, race_row
 from weather import weather_at
 from watch import push_workouts
 
@@ -146,12 +146,12 @@ def sync_drift(client: Garmin, db: Supabase) -> int:
 
 
 FIT_PER_RUN = int(os.getenv("FIT_PER_RUN", "6"))
-FIT_V = 1
+FIT_V = 2  # 1 = aerobe Schwelle, 2 = zusätzlich Laktatschwelle (alpha1 = 0,5)
 FIT_DAYS = 120
 
 
 def sync_fit(client: Garmin, db: Supabase, today: date) -> int:
-    """Original-Datei neuer Läufe: Brustgurt oder Handgelenk, Puls-Verteilung, DFA-alpha1 und aerobe Schwelle."""
+    """Original-Datei neuer Läufe: Brustgurt oder Handgelenk, Puls-Verteilung, DFA-alpha1, aerobe und Laktatschwelle."""
     runs = db.select(
         "activities",
         {
@@ -211,6 +211,14 @@ def sync_prediction(client: Garmin, db: Supabase, today: date) -> bool:
     return row is not None
 
 
+def sync_lactate(client: Garmin, db: Supabase) -> bool:
+    """Garmins Laktatschwelle (Puls und Tempo) mit dem Tag, an dem Garmin sie zuletzt bestimmt hat."""
+    row = lactate_row(client.get_lactate_threshold(latest=True))
+    if row:
+        db.upsert("garmin_lactate", row, "date")
+    return row is not None
+
+
 RACE_MONTHS = 12
 
 
@@ -243,6 +251,7 @@ def main() -> int:
         n_days = sync_days(client, db, days_to_sync(db, today))
         safe(lambda: sync_records(client, db), "Bestzeiten")
         safe(lambda: sync_prediction(client, db, today), "Rennzeit-Prognose")
+        safe(lambda: sync_lactate(client, db), "Laktatschwelle")
         # Kalender alle 2 Stunden prüfen, das spart Anfragen bei Garmin.
         now = datetime.now(timezone.utc)
         if now.hour % 2 == 0 and now.minute < 30 or os.getenv("RACES_ALWAYS"):

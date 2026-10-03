@@ -102,6 +102,10 @@ export function demoDataset(): Dataset {
           last.aet_hr = 147 + (last.id % 5) - Math.round(i / 28)
           last.aet_speed_mps = Math.round((1000 / (352 - fitness * 12 + (last.id % 3) * 3)) * 1000) / 1000
         }
+        if (hard) {
+          last.lt_hr = 172 + (last.id % 4) - Math.round(i / 28)
+          last.lt_speed_mps = Math.round((1000 / (288 - fitness * 10 + (last.id % 3) * 3)) * 1000) / 1000
+        }
       }
     }
   }
@@ -111,6 +115,10 @@ export function demoDataset(): Dataset {
     activities,
     days,
     garminRaces: [{ id: 1, name: 'Stadtlauf Halbmarathon', date: new Date(Date.now() + 140 * 86400_000).toISOString().slice(0, 10), distance_m: 21097.5, sport: 'running' }],
+    lactate: [
+      { date: new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10), hr: 163, speed_mps: 3.39 },
+      { date: new Date(Date.now() - 18 * 86400_000).toISOString().slice(0, 10), hr: 165, speed_mps: 3.45 },
+    ],
     predictions: [{ date: days.at(-1)!.date, time_5k: 1225, time_10k: 2560, time_half: 5690, time_marathon: 12050 }],
     records: mergeBests(
       [

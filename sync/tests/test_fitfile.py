@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fitfile import analyze, clean, dfa_alpha1, hr_hist, is_strap, threshold  # noqa: E402
+from fitfile import analyze, clean, dfa_alpha1, hr_hist, is_strap, lactate_threshold, threshold  # noqa: E402
 
 
 def white(n, seed=1):
@@ -47,6 +47,21 @@ def test_threshold_from_ramp():
     hr, speed = threshold(ws)
     assert abs(hr - 148.1) < 0.5
     assert abs(speed - (2.5 + 28.1 * 0.02)) < 0.02
+
+
+def test_lactate_threshold_from_ramp():
+    # Gleiche Rampe: 0,5 bei 164 bpm (1,2 - 44 * 0,016 = 0,496).
+    ws = [{"alpha1": 1.2 - (hr - 120) * 0.016, "hr": hr, "speed": 2.5 + (hr - 120) * 0.02} for hr in range(120, 171, 3)]
+    hr, speed = lactate_threshold(ws)
+    assert abs(hr - 163.75) < 0.5
+    assert abs(speed - (2.5 + 43.75 * 0.02)) < 0.02
+
+
+def test_lactate_threshold_needs_low_alpha():
+    # Rampe endet bei alpha1 0,58: Die Gerade würde 0,5 kurz darüber kreuzen, erreicht hat der Lauf es nicht.
+    ws = [{"alpha1": 1.2 - (hr - 120) * 0.016, "hr": hr, "speed": 3} for hr in range(120, 160, 2)]
+    assert lactate_threshold(ws) == (None, None)
+    assert threshold(ws)[0] is not None
 
 
 def test_threshold_needs_hr_range():
@@ -95,6 +110,9 @@ def test_analyze_ramp_run():
     assert row["rr_artifact_pct"] < 1
     assert row["aet_hr"] is not None and 125 < row["aet_hr"] < 160
     assert row["aet_speed_mps"] is not None
+    assert "lt_hr" in row
+    if row["lt_hr"] is not None:
+        assert row["lt_hr"] > row["aet_hr"]
 
 
 def test_analyze_wrist_run_without_rr():

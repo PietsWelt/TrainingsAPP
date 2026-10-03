@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mapping import activity_row, daily_row  # noqa: E402
+from mapping import activity_row, daily_row, lactate_row  # noqa: E402
 
 
 def test_activity_row_maps_core_fields():
@@ -123,3 +123,16 @@ def test_race_row_takes_only_race_events():
     assert race_row({"itemType": "workout", "id": 1, "title": "Plan · Intervalle", "date": "2027-04-01"}) is None
     assert race_row({**race, "isRace": False}) is None
     assert race_row({**race, "completionTarget": None})["distance_m"] is None
+
+
+def test_lactate_row_scales_speed():
+    lt = {"speed_and_heart_rate": {"calendarDate": "2026-09-14T08:00:00.0", "speed": 0.34166, "heartRate": 171}, "power": {}}
+    assert lactate_row(lt) == {"date": "2026-09-14", "hr": 171, "speed_mps": 3.417}
+
+
+def test_lactate_row_accepts_mps_and_rejects_junk():
+    assert lactate_row({"speed_and_heart_rate": {"calendarDate": "2026-09-14", "speed": 3.6, "heartRate": 168}})["speed_mps"] == 3.6
+    assert lactate_row({"speed_and_heart_rate": {"calendarDate": "2026-09-14", "speed": None, "heartRate": 168}})["speed_mps"] is None
+    assert lactate_row({"speed_and_heart_rate": {"calendarDate": None, "speed": 0.3, "heartRate": 168}}) is None
+    assert lactate_row({"speed_and_heart_rate": {"calendarDate": "2026-09-14", "speed": 0.3, "heartRate": None}}) is None
+    assert lactate_row(None) is None
