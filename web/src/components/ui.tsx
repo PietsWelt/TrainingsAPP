@@ -1,12 +1,12 @@
 import { useId, type ReactNode } from 'react'
 
-export function Card({ title, subtitle, action, children, className = '' }: { title?: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
+export function Card({ title, subtitle, action, children, className = '', hero = false }: { title?: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string; hero?: boolean }) {
   return (
-    <section className={`card ${/(^|\s)p-\d/.test(className) ? '' : 'p-4'} ${className}`}>
+    <section className={`card ${hero ? 'card-hero' : ''} ${/(^|\s)p-\d/.test(className) ? '' : 'p-4'} ${className}`}>
       {title && (
         <header className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+            <h2 className="text-[14px] font-semibold">{title}</h2>
             {subtitle && <p className="mt-0.5 text-xs text-ink-3">{subtitle}</p>}
           </div>
           {action}
@@ -22,7 +22,7 @@ export function Section({ title, action, children }: { title: string; action?: R
   return (
     <section className="space-y-2.5">
       <div className="flex items-baseline justify-between px-1 pt-2">
-        <h2 className="text-[13px] font-semibold tracking-wide text-ink-3 uppercase">{title}</h2>
+        <h2 className="font-sans text-[12px] font-semibold tracking-[0.12em] text-ink-3 uppercase">{title}</h2>
         {action}
       </div>
       {children}
@@ -43,7 +43,7 @@ export function Stat({ label, value, unit, hint, spark, color = 'var(--accent)',
     <div className="card flex flex-col p-4">
       <div className="text-xs font-medium text-ink-2">{label}</div>
       <div className="mt-1.5 flex items-baseline gap-1">
-        <span className="text-[28px] leading-none font-semibold tracking-tight">{value}</span>
+        <span className="font-display text-[26px] leading-none font-semibold tabular-nums">{value}</span>
         {unit && <span className="text-sm text-ink-3">{unit}</span>}
       </div>
       {spark && spark.filter((x) => x != null).length > 2 && <Sparkline values={spark} color={color} className="mt-3" />}
@@ -80,7 +80,7 @@ export function Sparkline({ values, color = 'var(--accent)', height = 32, classN
   )
 }
 
-/** Fortschrittsring mit Wert in der Mitte. */
+/** Fortschrittsring mit Wert in der Mitte. color="brand" zeichnet den Markenverlauf. */
 export function Ring({ value, max = 100, size = 76, stroke = 8, color = 'var(--accent)', children, label }: {
   value: number
   max?: number
@@ -90,12 +90,23 @@ export function Ring({ value, max = 100, size = 76, stroke = 8, color = 'var(--a
   children?: ReactNode
   label: string
 }) {
+  const gid = useId()
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
   const f = Math.max(0, Math.min(1, value / max))
+  const stroked = color === 'brand' ? `url(#${gid})` : color
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }} role="img" aria-label={label}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {color === 'brand' && (
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="var(--g1)" />
+              <stop offset=".55" stopColor="var(--g2)" />
+              <stop offset="1" stopColor="var(--g3)" />
+            </linearGradient>
+          </defs>
+        )}
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={stroke} />
         {f > 0 && (
           <circle
@@ -103,10 +114,12 @@ export function Ring({ value, max = 100, size = 76, stroke = 8, color = 'var(--a
             cy={size / 2}
             r={r}
             fill="none"
-            stroke={color}
+            className="ring-arc"
+            stroke={stroked}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={`${f * c} ${c}`}
+            style={{ ['--len' as string]: `${f * c}` }}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
           />
         )}
@@ -149,7 +162,7 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
           onClick={() => onChange(o.value)}
           role="tab"
           aria-selected={o.value === value}
-          className={`min-h-9 flex-auto truncate rounded-full px-2 font-medium transition-colors ${o.value === value ? 'bg-surface text-ink shadow-sm' : 'text-ink-2'}`}
+          className={`min-h-9 flex-auto truncate rounded-full px-2 font-medium transition-colors ${o.value === value ? 'bg-surface-solid text-ink shadow-sm ring-1 ring-[var(--card-border)]' : 'text-ink-2'}`}
         >
           {o.label}
         </button>

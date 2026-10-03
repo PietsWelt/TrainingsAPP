@@ -48,7 +48,7 @@ export function StrengthCard({ workouts, log, today }: { workouts: PlanWorkout[]
               {which === 'legs' && s.legsAfterKey && !done && ' · nach dem Lauf, mit Abstand'}
             </div>
           </div>
-          <button onClick={() => setOpen(which)} className={`min-h-10 shrink-0 rounded-full px-3.5 text-sm font-medium ${done ? 'bg-surface-2 text-ink-2' : 'bg-accent text-white'}`}>
+          <button onClick={() => setOpen(which)} className={`min-h-10 shrink-0 rounded-full px-3.5 text-sm font-medium ${done ? 'bg-surface-2 text-ink-2' : 'btn-primary'}`}>
             {done ? 'Ansehen' : 'Starten'}
           </button>
         </div>
@@ -107,7 +107,7 @@ function StrengthSheet({ which, week, done, today, log, onClose }: { which: Whic
       title={which === 'legs' ? 'Beine im Gym' : 'Stabi'}
       onClose={onClose}
       footer={
-        <button disabled={saving} onClick={markDone} className="min-h-12 w-full rounded-xl bg-accent text-[15px] font-semibold text-white disabled:opacity-60">
+        <button disabled={saving} onClick={markDone} className="min-h-12 w-full rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
           {done ? 'Erledigt ✓' : saving ? 'Speichern …' : 'Erledigt'}
         </button>
       }

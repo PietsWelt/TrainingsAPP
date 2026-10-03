@@ -49,10 +49,10 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
   if (plan.loading) return <div className="p-10 text-center text-sm text-ink-3">Lade Plan …</div>
 
   return (
-    <div className="page-in space-y-3">
+    <div className="page-in desk-cols space-y-3">
       {plan.error && <div className="rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{plan.error}</div>}
 
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1">
+      <div className="no-scrollbar span-all -mx-4 flex gap-2 overflow-x-auto px-4 py-1 lg:mx-0 lg:px-0">
         {plan.events.map((e) => (
           <button
             key={e.id}
@@ -85,7 +85,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
             </button>
             <button
               onClick={() => setEditing({ draft: { name: r.name, date: r.date, type: guessType(r) }, garminId: r.id })}
-              className="min-h-11 rounded-xl bg-accent text-sm font-semibold text-white"
+              className="min-h-11 rounded-xl btn-primary text-sm font-semibold"
             >
               Übernehmen
             </button>
@@ -96,7 +96,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
       {!selected && !plan.error && (
         <Card>
           <p className="text-sm text-ink-2">Noch kein Rennen geplant. Lege dein Ziel an, dann erstelle ich dir einen Trainingsplan bis zum Renntag.</p>
-          <button onClick={() => setEditing('new')} className="mt-3 w-full rounded-xl bg-accent py-2.5 text-sm font-semibold text-white">Rennen anlegen</button>
+          <button onClick={() => setEditing('new')} className="mt-3 w-full rounded-xl btn-primary py-2.5 text-sm font-semibold">Rennen anlegen</button>
         </Card>
       )}
 
@@ -172,7 +172,7 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
   const days = p.daysToRace != null && p.daysToRace >= 0 ? p.daysToRace : null
   const span = workouts.length ? Math.max(1, daysBetween(workouts[0].date, event.date)) : 1
   return (
-    <Card className="p-5">
+    <Card hero className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs font-medium text-ink-3">
@@ -186,8 +186,8 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
       </div>
 
       <div className="mt-5 flex items-center gap-5">
-        <Ring value={days != null ? span - days : 0} max={span} size={96} stroke={9} label={`${days ?? 0} Tage bis zum Rennen`}>
-          <span className="text-[28px] leading-none font-bold tracking-tight">{days ?? '–'}</span>
+        <Ring value={days != null ? span - days : 0} max={span} size={96} stroke={9} color="brand" label={`${days ?? 0} Tage bis zum Rennen`}>
+          <span className="font-display text-[26px] leading-none font-bold tabular-nums">{days ?? '–'}</span>
           <span className="mt-0.5 text-[11px] text-ink-3">{days === 1 ? 'Tag' : 'Tage'}</span>
         </Ring>
         <div className="min-w-0 flex-1 space-y-3">
@@ -200,7 +200,7 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
           <div>
             {/* Fortschritt: erledigt (Akzent) vor dem Soll bis heute (Markierung). */}
             <div className="relative h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
-              <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
+              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--brand)' }} />
               {duePct > 0 && duePct < 100 && <div className="absolute top-0 h-full w-0.5 bg-ink-3" style={{ left: `${duePct}%` }} />}
             </div>
             <div className="mt-1.5 text-xs text-ink-2">
@@ -353,7 +353,7 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
               Original zurück
             </button>
             {w.status === 'planned' && (
-              <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl bg-accent text-[15px] font-semibold text-white disabled:opacity-60">
+              <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
                 Erledigt
               </button>
             )}
@@ -363,7 +363,7 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
             <button disabled={busy} onClick={run(onSkip)} className="min-h-12 rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
               {w.date >= today ? 'Überspringen' : 'Ausgelassen'}
             </button>
-            <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl bg-accent text-[15px] font-semibold text-white disabled:opacity-60">
+            <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
               Erledigt
             </button>
           </div>
@@ -491,7 +491,7 @@ function EventForm({ event, draft, onClose, onSave, onDelete }: {
               {err}
             </p>
           )}
-          <button disabled={busy} onClick={submit} className="min-h-12 w-full rounded-xl bg-accent text-[15px] font-semibold text-white disabled:opacity-60">
+          <button disabled={busy} onClick={submit} className="min-h-12 w-full rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
             {busy ? 'Plane …' : event ? 'Speichern' : 'Rennen anlegen und Plan erstellen'}
           </button>
         </>
@@ -552,7 +552,7 @@ function EventForm({ event, draft, onClose, onSave, onDelete }: {
             Trainingstage pro Woche
             <div className="mt-1 grid grid-cols-5 gap-1.5">
               {[3, 4, 5, 6, 7].map((d) => (
-                <button key={d} type="button" onClick={() => setDays(d)} className={`min-h-11 rounded-xl text-[15px] font-semibold ${d === days ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}>
+                <button key={d} type="button" onClick={() => setDays(d)} className={`min-h-11 rounded-xl text-[15px] font-semibold ${d === days ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}>
                   {d}
                 </button>
               ))}
@@ -562,7 +562,7 @@ function EventForm({ event, draft, onClose, onSave, onDelete }: {
             Tag für die lange Einheit
             <div className="mt-1 grid grid-cols-7 gap-1">
               {WEEKDAY_SHORT.map((d, i) => (
-                <button key={d} type="button" onClick={() => setLongDay(i)} className={`min-h-11 rounded-xl text-sm font-semibold ${i === longDay ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}>
+                <button key={d} type="button" onClick={() => setLongDay(i)} className={`min-h-11 rounded-xl text-sm font-semibold ${i === longDay ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}>
                   {d}
                 </button>
               ))}

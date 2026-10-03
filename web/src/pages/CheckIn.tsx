@@ -47,7 +47,7 @@ export function CheckInCard({ log, plan, today, strengthToday }: { log: DailyLog
     <>
       {!yesterdayDone ? (
         <Card title="Check-in für gestern" subtitle="Alkohol und Krafttraining fließen in deine Readiness ein.">
-          <button onClick={() => setOpen('yesterday')} className="min-h-12 w-full rounded-xl bg-accent text-[15px] font-semibold text-white">
+          <button onClick={() => setOpen('yesterday')} className="min-h-12 w-full rounded-xl btn-primary text-[15px] font-semibold">
             Jetzt eintragen
           </button>
         </Card>
@@ -156,7 +156,7 @@ function CheckInSheet({ log, initial, today, onClose, onSaved }: {
       title="Check-in"
       onClose={onClose}
       footer={
-        <button disabled={busy} onClick={save} className="min-h-12 w-full rounded-xl bg-accent text-[15px] font-semibold text-white disabled:opacity-60">
+        <button disabled={busy} onClick={save} className="min-h-12 w-full rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
           {busy ? 'Speichere …' : 'Speichern'}
         </button>
       }
@@ -180,7 +180,7 @@ function CheckInSheet({ log, initial, today, onClose, onSaved }: {
                 role="radio"
                 aria-checked={on}
                 onClick={() => set({ drinks: on ? null : n })}
-                className={`min-h-12 rounded-xl text-[15px] font-semibold ${on ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}
+                className={`min-h-12 rounded-xl text-[15px] font-semibold ${on ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}
               >
                 {n === 5 ? '5+' : n}
               </button>
@@ -196,7 +196,7 @@ function CheckInSheet({ log, initial, today, onClose, onSaved }: {
             role="radio"
             aria-checked={!d.gym}
             onClick={() => set({ gym: null })}
-            className={`col-span-2 min-h-11 rounded-xl text-sm font-semibold ${!d.gym ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}
+            className={`col-span-2 min-h-11 rounded-xl text-sm font-semibold ${!d.gym ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}
           >
             Kein Krafttraining
           </button>
@@ -208,7 +208,7 @@ function CheckInSheet({ log, initial, today, onClose, onSaved }: {
                 role="radio"
                 aria-checked={on}
                 onClick={() => set({ gym: { focus: f.id, hard: d.gym?.hard ?? true } })}
-                className={`min-h-11 rounded-xl px-1 text-sm font-semibold ${on ? 'bg-accent text-white' : 'bg-surface-2 text-ink-2'}`}
+                className={`min-h-11 rounded-xl px-1 text-sm font-semibold ${on ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}
               >
                 {f.label}
               </button>

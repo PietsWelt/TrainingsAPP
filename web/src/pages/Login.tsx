@@ -25,7 +25,7 @@ export function Login() {
         <input className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 outline-none focus:border-accent" type="email" autoComplete="username" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <input className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 outline-none focus:border-accent" type="password" autoComplete="current-password" placeholder="Passwort" value={password} onChange={(e) => setPassword(e.target.value)} required />
         {error && <p className="text-sm" style={{ color: 'var(--critical)' }}>{error}</p>}
-        <button disabled={busy} className="w-full rounded-xl bg-accent py-2.5 font-medium text-white disabled:opacity-60">
+        <button disabled={busy} className="w-full rounded-xl btn-primary py-2.5 font-medium disabled:opacity-60">
           {busy ? 'Anmelden …' : 'Anmelden'}
         </button>
       </form>

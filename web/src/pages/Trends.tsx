@@ -86,9 +86,9 @@ export function Trends({ data, drinks, gym, plan }: { data: Dataset; drinks: Dri
   const easyShare = easySum + hardSum > 0 ? Math.round((easySum / (easySum + hardSum)) * 100) : null
 
   return (
-    <div className="page-in space-y-3">
-      {plan && <WeekReviewButton data={data} plan={plan} log={{ drinks, gym: gym ?? {} }} />}
-      <div>
+    <div className="page-in desk-cols space-y-3">
+      {plan && <div className="span-all"><WeekReviewButton data={data} plan={plan} log={{ drinks, gym: gym ?? {} }} /></div>}
+      <div className="span-all">
         <Segmented
           value={range}
           onChange={setRange}
@@ -129,7 +129,7 @@ export function Trends({ data, drinks, gym, plan }: { data: Dataset; drinks: Dri
         </Card>
 
         <Card title="Ruhepuls" subtitle={avgRhr != null ? `Ø ${Math.round(avgRhr)} bpm` : undefined}>
-          <SimpleLineChart name="Ruhepuls" unit="bpm" color="var(--series-2)" data={days.map((d) => ({ date: d.date, value: d.resting_hr }))} />
+          <SimpleLineChart name="Ruhepuls" unit="bpm" color="var(--c-erh)" data={days.map((d) => ({ date: d.date, value: d.resting_hr }))} />
         </Card>
       </Section>
 

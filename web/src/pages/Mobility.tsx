@@ -56,7 +56,7 @@ export function MobilityCard({ activities, today }: { activities: Activity[]; to
               {r.title} · {LEVELS.find((l) => l.value === level)?.label} · {r.minutes} min
             </div>
           </div>
-          <button onClick={() => setOpen(true)} className={`min-h-10 shrink-0 rounded-full px-3.5 text-sm font-medium ${isDone ? 'bg-surface-2 text-ink-2' : 'bg-accent text-white'}`}>
+          <button onClick={() => setOpen(true)} className={`min-h-10 shrink-0 rounded-full px-3.5 text-sm font-medium ${isDone ? 'bg-surface-2 text-ink-2' : 'btn-primary'}`}>
             {isDone ? 'Ansehen' : 'Starten'}
           </button>
         </div>
@@ -109,7 +109,7 @@ export function MobilitySheet({ kind, done = false, onClose, onDone }: { kind: R
               toast(done ? 'Schon als erledigt gespeichert.' : 'Gespeichert: Dehnen erledigt.')
               onDone()
             }}
-            className="min-h-12 w-full rounded-xl bg-accent text-[15px] font-semibold text-white"
+            className="min-h-12 w-full rounded-xl btn-primary text-[15px] font-semibold"
           >
             {done ? 'Erledigt ✓' : 'Erledigt'}
           </button>

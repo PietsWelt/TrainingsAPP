@@ -18,6 +18,7 @@ import { Login } from './pages/Login'
 import { Plan } from './pages/Plan'
 import { usePlan } from './lib/plan/usePlan'
 import { Today } from './pages/Today'
+import { Logo } from './components/Logo'
 
 // Trends bringt die Diagramm-Bibliothek mit (etwa die Hälfte des Codes). Sie wird erst geladen,
 // wenn die App steht, damit der Start schnell bleibt und der Wechsel zu Trends trotzdem sofort klappt.
@@ -87,9 +88,12 @@ function Main() {
     return Promise.resolve()
   })
 
+  // Richtung des letzten Wechsels: die neue Seite gleitet von dort herein, wohin gewischt wurde.
+  const [dir, setDir] = useState<'right' | 'left' | null>(null)
   function selectTab(t: Tab) {
     // Erneut auf den aktiven Tab tippen springt nach oben, ein Wechsel startet oben.
     window.scrollTo({ top: 0, behavior: t === tab ? 'smooth' : 'auto' })
+    if (t !== tab) setDir(TABS.indexOf(t) > TABS.indexOf(tab) ? 'right' : 'left')
     setTab(t)
   }
 
@@ -136,42 +140,92 @@ function Main() {
 
   const opened = openId != null ? data?.activities.find((a) => a.id === openId) : undefined
 
+  const NAV: { tab: Tab; icon: ReactNode }[] = [
+    { tab: 'today', icon: <path d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4-1.4 1.4M7 17l-1.4 1.4m12.8 0L17 17M7 7 5.6 5.6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" /> },
+    { tab: 'plan', icon: <path d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 9 2 2 4-4" /> },
+    { tab: 'trends', icon: <path d="M3 17l5-5 4 4 8-8m0 0h-5m5 0v5" /> },
+    { tab: 'activities', icon: <path d="M4 6h16M4 12h16M4 18h10" /> },
+  ]
+
   return (
-    <div className="mx-auto min-h-dvh max-w-xl overflow-x-clip">
-      <header className="sticky top-0 z-10 bg-bg/85 px-5 pb-3 backdrop-blur-xl" style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[13px] font-medium text-ink-3">{tab === 'today' ? dateLabel(localToday(), { weekday: 'long', day: 'numeric', month: 'long' }) : <SyncStatus data={data} />}</p>
-            <h1 className="text-[30px] leading-tight font-bold tracking-tight">{TITLES[tab]}</h1>
-          </div>
-          <button onClick={syncNow} disabled={syncing} aria-label="Mit Garmin synchronisieren" className="card relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-2 disabled:opacity-70">
+    <div className="min-h-dvh overflow-x-clip lg:pl-64">
+      {/* Verlauf für aktive Symbole, einmal definiert (nicht in einem ausgeblendeten Element, sonst fehlt er). */}
+      <svg width="0" height="0" className="absolute" aria-hidden>
+        <defs>
+          <linearGradient id="nav-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="var(--g1)" />
+            <stop offset=".5" stopColor="var(--g2)" />
+            <stop offset="1" stopColor="var(--g3)" />
+          </linearGradient>
+        </defs>
+      </svg>
+      {/* PC: Seitenleiste mit Logo, Bereichen und Sync. */}
+      <aside className="glass fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-line px-4 pt-6 pb-5 lg:flex">
+        <div className="flex items-center gap-2.5 px-2 pb-7">
+          <Logo size={34} />
+          <span className="font-display text-[19px] font-semibold">Kadenz</span>
+        </div>
+        <nav className="flex flex-col gap-1" aria-label="Bereiche">
+          {NAV.map((n) => (
+            <SideButton key={n.tab} active={tab === n.tab} onClick={() => selectTab(n.tab)} label={TITLES[n.tab]} icon={n.icon} />
+          ))}
+        </nav>
+        <div className="mt-auto space-y-3 px-2">
+          <button onClick={syncNow} disabled={syncing} className="card relative flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-ink-2 disabled:opacity-70">
             <SyncIcon spinning={syncing} />
+            {syncing ? 'Sync läuft …' : 'Jetzt synchronisieren'}
             <SyncDot data={data} />
           </button>
+          <p className="text-xs leading-snug text-ink-3"><SyncStatus data={data} /></p>
         </div>
-        {tab === 'today' && <p className="mt-0.5 text-xs text-ink-3"><SyncStatus data={data} /></p>}
-      </header>
+      </aside>
 
-      <main ref={mainRef} className="px-4 pt-1 will-change-transform" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 100px)' }}>
-        <PullIndicator ref={pullRef} ready={ptr.ready} busy={ptr.busy} />
-        {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
-        {!data && !error && <SkeletonPage />}
-        {data && tab === 'today' && <Today data={data} plan={plan} log={log} onOpenActivity={setOpenId} onOpenPlan={() => selectTab('plan')} />}
-        {data && tab === 'plan' && <Plan plan={plan} gym={log.gym} activities={data.activities} records={data.records} predictions={data.predictions} garminRaces={data.garminRaces} />}
-        {data && tab === 'trends' && (
-          <Suspense fallback={<SkeletonPage />}>
-            <Trends data={data} drinks={log.drinks} gym={log.gym} plan={plan} />
-          </Suspense>
-        )}
-        {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
-      </main>
+      <div className="mx-auto max-w-xl lg:max-w-5xl lg:px-6">
+        <header className="glass-mobile sticky top-0 z-10 px-5 pb-3 lg:static lg:px-0 lg:pt-8" style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink-3">
+                <span className="lg:hidden"><Logo size={18} /></span>
+                {tab === 'today' ? dateLabel(localToday(), { weekday: 'long', day: 'numeric', month: 'long' }) : <SyncStatus data={data} />}
+              </p>
+              <h1 className="text-[28px] leading-tight font-semibold lg:text-[34px]">{TITLES[tab]}</h1>
+            </div>
+            <button onClick={syncNow} disabled={syncing} aria-label="Mit Garmin synchronisieren" className="card relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-2 disabled:opacity-70 lg:hidden">
+              <SyncIcon spinning={syncing} />
+              <SyncDot data={data} />
+            </button>
+          </div>
+          {tab === 'today' && <p className="mt-0.5 text-xs text-ink-3 lg:hidden"><SyncStatus data={data} /></p>}
+        </header>
 
-      <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}>
-        <div className="card pointer-events-auto mx-auto grid max-w-md grid-cols-4 gap-1 rounded-full p-1.5 backdrop-blur-xl" style={{ background: 'color-mix(in srgb, var(--surface) 86%, transparent)' }}>
-          <NavButton active={tab === 'today'} onClick={() => selectTab('today')} label="Heute" icon={<path d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4-1.4 1.4M7 17l-1.4 1.4m12.8 0L17 17M7 7 5.6 5.6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />} />
-          <NavButton active={tab === 'plan'} onClick={() => selectTab('plan')} label="Plan" icon={<path d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 9 2 2 4-4" />} />
-          <NavButton active={tab === 'trends'} onClick={() => selectTab('trends')} label="Trends" icon={<path d="M3 17l5-5 4 4 8-8m0 0h-5m5 0v5" />} />
-          <NavButton active={tab === 'activities'} onClick={() => selectTab('activities')} label="Aktivitäten" icon={<path d="M4 6h16M4 12h16M4 18h10" />} />
+        <main ref={mainRef} className="px-4 pt-1 will-change-transform lg:px-0 lg:pt-2" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 100px)' }}>
+          <PullIndicator ref={pullRef} ready={ptr.ready} busy={ptr.busy} />
+          {error && <div className="mb-3 rounded-xl border border-line bg-surface p-3 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
+          {!data && !error && <SkeletonPage />}
+          <div key={tab} className={dir === 'right' ? 'tab-from-right' : dir === 'left' ? 'tab-from-left' : ''}>
+            {data && tab === 'today' && <Today data={data} plan={plan} log={log} onOpenActivity={setOpenId} onOpenPlan={() => selectTab('plan')} />}
+            {data && tab === 'plan' && <Plan plan={plan} gym={log.gym} activities={data.activities} records={data.records} predictions={data.predictions} garminRaces={data.garminRaces} />}
+            {data && tab === 'trends' && (
+              <Suspense fallback={<SkeletonPage />}>
+                <Trends data={data} drinks={log.drinks} gym={log.gym} plan={plan} />
+              </Suspense>
+            )}
+            {data && tab === 'activities' && <Activities activities={data.activities} onOpen={setOpenId} />}
+          </div>
+        </main>
+      </div>
+
+      {/* Handy: schwebende Tab-Leiste aus Glas mit gleitender Markierung. */}
+      <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 lg:hidden" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }} aria-label="Bereiche">
+        <div className="glass pointer-events-auto relative mx-auto grid max-w-md grid-cols-4 gap-1 rounded-full border border-[var(--card-border)] p-1.5" style={{ boxShadow: 'var(--shadow)' }}>
+          <span
+            aria-hidden
+            className="absolute top-1.5 bottom-1.5 left-1.5 rounded-full bg-surface-2"
+            style={{ width: 'calc((100% - 12px - 12px) / 4)', transform: `translateX(calc(${TABS.indexOf(tab)} * (100% + 4px)))`, transition: 'transform 380ms var(--spring)' }}
+          />
+          {NAV.map((n) => (
+            <NavButton key={n.tab} active={tab === n.tab} onClick={() => selectTab(n.tab)} label={TITLES[n.tab]} icon={n.icon} />
+          ))}
         </div>
       </nav>
 
@@ -204,12 +258,27 @@ function PullIndicator({ ref, ready, busy }: { ref: Ref<HTMLDivElement>; ready: 
   )
 }
 
+function NavIcon({ icon, active }: { icon: ReactNode; active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? 'url(#nav-grad)' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {icon}
+    </svg>
+  )
+}
+
 function NavButton({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: ReactNode }) {
   return (
-    <button onClick={onClick} aria-current={active ? 'page' : undefined} className={`flex min-h-13 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 text-[11px] font-medium transition-colors ${active ? 'accent-soft text-accent' : 'text-ink-3'}`}>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        {icon}
-      </svg>
+    <button onClick={onClick} aria-current={active ? 'page' : undefined} className={`relative flex min-h-13 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 text-[11px] font-semibold transition-colors duration-200 ${active ? 'text-ink' : 'text-ink-3'}`}>
+      <NavIcon icon={icon} active={active} />
+      {label}
+    </button>
+  )
+}
+
+function SideButton({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: ReactNode }) {
+  return (
+    <button onClick={onClick} aria-current={active ? 'page' : undefined} className={`flex min-h-11 items-center gap-3 rounded-2xl px-3 text-left text-[15px] font-semibold transition-colors duration-200 ${active ? 'card text-ink' : 'text-ink-3 hover:bg-surface-2 hover:text-ink'}`}>
+      <NavIcon icon={icon} active={active} />
       {label}
     </button>
   )

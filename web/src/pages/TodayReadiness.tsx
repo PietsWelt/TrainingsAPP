@@ -10,10 +10,10 @@ import type { DailyLogState } from '../lib/useDailyLog'
 export function ReadinessCard({ r, garmin }: { r: Readiness; garmin: number | null | undefined }) {
   const [open, setOpen] = useState(false)
   return (
-    <Card className="p-5">
+    <Card hero className="p-5">
       <button onClick={() => setOpen(!open)} aria-expanded={open} className="press-row -m-2 flex w-[calc(100%+1rem)] items-center gap-5 rounded-2xl p-2 text-left">
-        <Ring value={r.score} size={108} stroke={10} color={barColor(r.score)} label={`Readiness ${r.score} von 100`}>
-          <span className="text-[34px] leading-none font-bold tracking-tight">{r.score}</span>
+        <Ring value={r.score} size={108} stroke={10} color="brand" label={`Readiness ${r.score} von 100`}>
+          <span className="font-display text-[32px] leading-none font-bold tabular-nums">{r.score}</span>
           <span className="mt-0.5 text-[11px] text-ink-3">von 100</span>
         </Ring>
         <div className="min-w-0 flex-1">
@@ -91,7 +91,7 @@ export function ProposalCard({ plan, r, today, log }: { plan: PlanState; r: Read
             key={o.id}
             disabled={busy}
             onClick={() => choose(o.changed, o.message)}
-            className={`min-h-11 rounded-xl text-[15px] font-semibold disabled:opacity-60 ${i === 0 ? 'bg-accent text-white' : 'bg-surface-2 text-ink'}`}
+            className={`min-h-11 rounded-xl text-[15px] font-semibold disabled:opacity-60 ${i === 0 ? 'btn-primary' : 'bg-surface-2 text-ink'}`}
           >
             {o.label}
           </button>
