@@ -57,7 +57,9 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
           <button
             key={e.id}
             onClick={() => {
-              setSelectedId(e.id)
+              // Zweiter Tipp auf das gewählte Rennen öffnet direkt die Bearbeitung.
+              if (e.id === selected?.id) setEditing(e)
+              else setSelectedId(e.id)
             }}
             className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-medium ${e.id === selected?.id ? 'bg-ink text-bg' : 'card text-ink-2'} ${e.date < today ? 'opacity-60' : ''}`}
           >
@@ -115,6 +117,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
           onClose={() => setEditing(null)}
           onSave={async (e, isNew) => {
             await plan.saveEvent(e, isNew)
+            toast(isNew ? 'Gespeichert: Rennen angelegt, Plan erstellt.' : 'Gespeichert: Rennen geändert, Plan ab morgen angepasst.')
             if (editing !== 'new' && 'draft' in editing) {
               markHandled(editing.garminId)
               setHandled(handledIds())
@@ -124,6 +127,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
           }}
           onDelete={async (id) => {
             await plan.deleteEvent(id)
+            toast('Rennen gelöscht.')
             setSelectedId(null)
             setEditing(null)
           }}
@@ -182,7 +186,12 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
           <h2 className="mt-0.5 text-[22px] leading-tight font-semibold tracking-tight">{event.name}</h2>
           <div className="mt-0.5 text-xs text-ink-2">{dateLabel(event.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
         </div>
-        <button onClick={onEdit} className="min-h-9 shrink-0 rounded-full bg-surface-2 px-3.5 text-xs font-semibold text-ink-2">Bearbeiten</button>
+        <button onClick={onEdit} className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-surface-2 px-4 text-sm font-semibold text-ink-2">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4" />
+          </svg>
+          Ändern
+        </button>
       </div>
 
       <div className="mt-5 flex items-center gap-5">
@@ -491,9 +500,47 @@ function EventForm({ event, draft, onClose, onSave, onDelete }: {
               {err}
             </p>
           )}
-          <button disabled={busy} onClick={submit} className="min-h-12 w-full rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
-            {busy ? 'Plane …' : event ? 'Speichern' : 'Rennen anlegen und Plan erstellen'}
-          </button>
+{event && confirmDelete ? (
+            <div className="space-y-2">
+              <p className="text-sm">„{event.name}“ und den ganzen Plan dazu löschen? Das lässt sich nicht rückgängig machen.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setConfirmDelete(false)} className="min-h-12 rounded-xl bg-surface-2 text-[15px] font-semibold">
+                  Abbrechen
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={async () => {
+                    tap()
+                    setBusy(true)
+                    try {
+                      await onDelete(event.id)
+                    } catch (e) {
+                      setErr((e as Error).message)
+                      setBusy(false)
+                    }
+                  }}
+                  className="min-h-12 rounded-xl text-[15px] font-semibold text-white disabled:opacity-60"
+                  style={{ background: 'var(--critical)' }}
+                >
+                  {busy ? 'Lösche …' : 'Endgültig löschen'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              {event && (
+                <button onClick={() => setConfirmDelete(true)} aria-label="Rennen löschen" className="flex min-h-12 shrink-0 items-center gap-1.5 rounded-xl bg-surface-2 px-4 text-[15px] font-semibold" style={{ color: 'var(--critical)' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
+                  </svg>
+                  Löschen
+                </button>
+              )}
+              <button disabled={busy} onClick={submit} className="min-h-12 flex-1 rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
+                {busy ? 'Plane …' : event ? 'Speichern' : 'Rennen anlegen und Plan erstellen'}
+              </button>
+            </div>
+          )}
         </>
       }
     >
@@ -577,35 +624,6 @@ function EventForm({ event, draft, onClose, onSave, onDelete }: {
 
       {event && <p className="text-xs text-ink-3">Änderungen an Datum, Rennform, Zielzeit oder Trainingstagen planen ab morgen neu. Bereits Erledigtes bleibt.</p>}
 
-      {event &&
-        (confirmDelete ? (
-          <div className="rounded-xl border border-line bg-surface p-3">
-            <p className="text-sm">„{event.name}“ und den ganzen Plan dazu löschen?</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button onClick={() => setConfirmDelete(false)} className="rounded-xl bg-surface-2 py-2.5 text-sm font-semibold">Abbrechen</button>
-              <button
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true)
-                  try {
-                    await onDelete(event.id)
-                  } catch (e) {
-                    setErr((e as Error).message)
-                    setBusy(false)
-                  }
-                }}
-                className="rounded-xl py-2.5 text-sm font-semibold text-white"
-                style={{ background: 'var(--critical)' }}
-              >
-                Löschen
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => setConfirmDelete(true)} className="w-full rounded-xl py-3 text-sm font-semibold" style={{ color: 'var(--critical)' }}>
-            Rennen löschen
-          </button>
-        ))}
     </Sheet>
   )
 }
