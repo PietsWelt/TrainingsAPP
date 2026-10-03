@@ -22,6 +22,10 @@ describe('overloadCheck', () => {
     expect(c.signals.map((s) => s.key).sort()).toEqual(['rhr', 'sleep'])
     expect(c.level).toBe(2)
   })
+  it('ignoriert 1–2 kurze Nächte, z. B. nach dem Feiern', () => {
+    const c = overloadCheck(days((i) => (i < 2 ? { sleep_s: 3.5 * 3600 } : {})), [], [], TODAY)
+    expect(c.signals).toHaveLength(0)
+  })
   it('nutzt Garmins HRV-Normalbereich', () => {
     const c = overloadCheck(days((i) => (i === 0 ? { hrv_weekly_avg: 50, hrv_baseline_low: 55 } : {})), [], [], TODAY)
     expect(c.signals.map((s) => s.key)).toEqual(['hrv'])

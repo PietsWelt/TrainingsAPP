@@ -39,7 +39,7 @@ const nums = (xs: (number | null | undefined)[]) => xs.filter((x): x is number =
  * - HRV: Wochenschnitt unter deinem Normalbereich (Garmins HRV-Status, sonst 1 Standardabweichung unter dem Schnitt).
  * - Ruhepuls: Wochenschnitt mindestens 5 Schläge über deinem Schnitt.
  * - Trainingslast: letzte 7 Tage mehr als das 1,5-Fache deines 4-Wochen-Schnitts.
- * - Schlaf: im Schnitt unter 6 h oder über 1 h weniger als sonst.
+ * - Schlaf: die meisten Nächte der Woche unter 6 h oder über 1 h kürzer als sonst (Median, 1–2 kurze Nächte zählen nicht).
  * - Gefühl: mindestens 2 Einheiten in 10 Tagen als „zu hart“ bewertet.
  */
 export function overloadCheck(days: DailyMetrics[], activities: Activity[], workouts: PlanWorkout[], today: string): OverloadCheck {
@@ -76,15 +76,21 @@ export function overloadCheck(days: DailyMetrics[], activities: Activity[], work
     if (chronic > 0 && acute / chronic > 1.5) signals.push({ key: 'load', label: 'Trainingslast', detail: `Letzte 7 Tage ${Math.round((acute / chronic) * 100)} % deines Wochenschnitts.` })
   }
 
-  // Schlaf
+  // Schlaf: Median statt Schnitt, damit 1–2 kurze Nächte (z. B. nach dem Feiern) nicht zählen.
+  // Erst wenn die meisten Nächte der Woche zu kurz waren, ist es ein Warnzeichen.
+  const median = (xs: number[]) => {
+    const v = [...xs].sort((a, b) => a - b)
+    return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2
+  }
   const sleepWeek = nums(week.map((d) => d.sleep_s)).map((s) => s / 3600)
   const sleepBase = nums(base.map((d) => d.sleep_s)).map((s) => s / 3600)
   if (sleepWeek.length >= 5) {
-    const m = mean(sleepWeek)!
-    const bm = sleepBase.length >= 10 ? mean(sleepBase)! : null
+    const m = median(sleepWeek)
+    const bm = sleepBase.length >= 10 ? median(sleepBase) : null
     if (m < 6 || (bm != null && m < bm - 1)) {
+      const short = sleepWeek.filter((h) => h < (bm != null ? Math.max(6, bm - 1) : 6)).length
       const h = Math.floor(m)
-      signals.push({ key: 'sleep', label: 'Schlaf', detail: `Im Schnitt ${h}:${String(Math.round((m - h) * 60)).padStart(2, '0')} h pro Nacht${bm != null ? `, sonst ${bm.toFixed(1).replace('.', ',')} h` : ''}.` })
+      signals.push({ key: 'sleep', label: 'Schlaf', detail: `${short} von ${sleepWeek.length} Nächten zu kurz, meist um ${h}:${String(Math.round((m - h) * 60)).padStart(2, '0')} h${bm != null ? ` statt sonst ${bm.toFixed(1).replace('.', ',')} h` : ''}.` })
     }
   }
 
