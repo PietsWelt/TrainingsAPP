@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PlanWorkout } from './plan/types'
-import { legSession, stabiSession, weekStrength } from './strength'
+import { legSession, mergeFocus, setsOf, stabiSession, upperSession, weekStrength } from './strength'
 
 // Woche ab Montag, 5. Oktober 2026.
 const MON = '2026-10-05'
@@ -62,5 +62,30 @@ describe('Einheiten', () => {
     expect(stabiSession('easy').steps).toHaveLength(5)
     expect(stabiSession('hard').rounds).toBe(3)
     expect(stabiSession('medium').minutes).toBeGreaterThan(stabiSession('easy').minutes)
+  })
+})
+
+describe('Oberkörper', () => {
+  it('A und B haben je 7 Übungen ohne Dopplung', () => {
+    const a = upperSession('A', 'base').steps.map((s) => s.ex.id)
+    const b = upperSession('B', 'base').steps.map((s) => s.ex.id)
+    expect(a).toHaveLength(7)
+    expect(b).toHaveLength(7)
+    expect(a.filter((id) => b.includes(id))).toEqual([])
+  })
+  it('macht im Taper weniger Sätze', () => {
+    const base = upperSession('A', 'base').steps.reduce((n, s) => n + setsOf(s.dose), 0)
+    const taper = upperSession('A', 'taper').steps.reduce((n, s) => n + setsOf(s.dose), 0)
+    expect(taper).toBeLessThan(base)
+  })
+  it('liest Sätze aus der Dosis', () => {
+    expect(setsOf('3 × 8–10 je Bein')).toBe(3)
+    expect(setsOf('30 s je Seite')).toBe(1)
+  })
+  it('macht aus Beinen und Oberkörper Ganzkörper', () => {
+    expect(mergeFocus('legs', 'upper')).toBe('full')
+    expect(mergeFocus('core', 'legs')).toBe('legs')
+    expect(mergeFocus(undefined, 'upper')).toBe('upper')
+    expect(mergeFocus('upper', 'upper')).toBe('upper')
   })
 })
