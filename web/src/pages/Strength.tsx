@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Sheet } from '../components/Sheet'
 import { Card, Pill, Segmented } from '../components/ui'
+import { GymHistorySheet } from './GymHistory'
 import type { GymByDate } from '../lib/dailyLog'
 import { tap } from '../lib/haptics'
 import { addDays, mondayOf } from '../lib/plan/dates'
@@ -24,6 +25,7 @@ import {
   type UpperVariant,
   type WeekStrength,
 } from '../lib/strength'
+import { cachedGymSets, fmtSets, lastSets, loadGymSets, parseNum, progression, repRange, saveGymSession, type GymSession, type GymSet } from '../lib/gymSets'
 import { toast } from '../lib/toast'
 import type { DailyLogState } from '../lib/useDailyLog'
 
@@ -100,6 +102,7 @@ export function StrengthCard({ workouts, log, today }: { workouts: PlanWorkout[]
 /** Auf „Heute“: jederzeit ins Gym, mit Läufer-Beintag oder Oberkörperplan zum Abhaken. */
 export function GymCard({ workouts, log, today }: { workouts: PlanWorkout[]; log: DailyLogState; today: string }) {
   const [open, setOpen] = useState<Which | null>(null)
+  const [history, setHistory] = useState(false)
   const s = weekStrength(mondayOf(today), workouts, log.gym, today)
   const legs = legSession(s.phase)
   const upper = nextUpper()
@@ -107,7 +110,15 @@ export function GymCard({ workouts, log, today }: { workouts: PlanWorkout[]; log
   const legsHint = s.legsDone ? 'diese Woche erledigt' : s.raceWeek ? 'Rennwoche, besser auslassen' : s.legs === today ? 'Vorschlag: heute' : s.legs ? `Vorschlag: ${wd(mondayOf(today), s.legs)}` : ''
   return (
     <>
-      <Card title="Gym" subtitle="Plan öffnen, Sätze abhaken, am Ende speichern">
+      <Card
+        title="Gym"
+        subtitle="Plan öffnen, Sätze abhaken, am Ende speichern"
+        action={
+          <button onClick={() => setHistory(true)} className="min-h-10 shrink-0 rounded-full bg-surface-2 px-3.5 text-sm font-medium text-ink-2">
+            Verlauf
+          </button>
+        }
+      >
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => setOpen('legs')} className="press-row rounded-2xl bg-surface-2 p-3 text-left">
             <div className="text-[15px] font-semibold">Läufer-Beintag</div>
@@ -127,6 +138,7 @@ export function GymCard({ workouts, log, today }: { workouts: PlanWorkout[]; log
         </div>
       </Card>
       {open && <StrengthSheet which={open} week={s} done={false} today={today} log={log} onClose={() => setOpen(null)} />}
+      {history && <GymHistorySheet onClose={() => setHistory(false)} />}
     </>
   )
 }
@@ -162,29 +174,67 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
   const current = log.gym[today]
   const tracked = which !== 'stabi'
   const steps = which === 'legs' ? legs.steps : which === 'upper' ? upper.steps : stabi.steps
-  // Abgehakte Sätze bleiben für heute gespeichert, auch wenn du das Blatt zwischendurch schließt.
-  const trackKey = `gym.track.${today}.${which === 'upper' ? `upper${variant}` : which}`
-  const [track, setTrack] = useState(() => ({ key: trackKey, sets: readStore<Record<string, number>>(trackKey, {}) }))
-  const doneSets = track.key === trackKey ? track.sets : readStore<Record<string, number>>(trackKey, {})
+  // Sätze mit Gewicht und Wiederholungen bleiben für heute gespeichert, auch wenn du das Blatt zwischendurch schließt.
+  const session: GymSession | null = which === 'legs' ? 'legs' : which === 'upper' ? `upper${variant}` : null
+  const trackKey = `gym.sets.${today}.${session}`
+  const [track, setTrack] = useState(() => ({ key: trackKey, sets: readStore<Draft>(trackKey, {}) }))
+  const draft = track.key === trackKey ? track.sets : readStore<Draft>(trackKey, {})
+  const [history, setHistory] = useState<GymSet[]>(() => cachedGymSets() ?? [])
+  useEffect(() => {
+    if (!tracked) return
+    loadGymSets().then(setHistory, () => {})
+  }, [tracked])
   const [rest, setRest] = useState<{ sec: number; n: number } | null>(null)
+  const setsFor = (x: Prescribed) => draft[x.ex.id] ?? startSets(x, lastSets(history, x.ex.id, today))
   const total = steps.reduce((n, x) => n + setsOf(x.dose), 0)
-  const finished = steps.reduce((n, x) => n + Math.min(setsOf(x.dose), doneSets[x.ex.id] ?? 0), 0)
+  const finished = tracked ? steps.reduce((n, x) => n + setsFor(x).filter((r) => r.done).length, 0) : 0
 
-  function toggleSet(id: string, i: number, index: number) {
+  function update(x: Prescribed, next: SetDraft[]) {
+    const all = { ...draft, [x.ex.id]: next }
+    setTrack({ key: trackKey, sets: all })
+    writeStore(trackKey, all)
+  }
+
+  /** Gewicht oder Wiederholungen ändern: gilt auch für die folgenden, noch offenen Sätze. */
+  function edit(x: Prescribed, i: number, field: 'kg' | 'reps', value: string) {
+    const next = setsFor(x).map((r, k) => (k === i || (k > i && !r.done) ? { ...r, [field]: value } : r))
+    update(x, next)
+  }
+
+  function toggleSet(x: Prescribed, i: number, index: number) {
     tap()
-    const have = doneSets[id] ?? 0
-    const next = { ...doneSets, [id]: i < have ? i : i + 1 }
-    setTrack({ key: trackKey, sets: next })
-    writeStore(trackKey, next)
-    if (i >= have) {
+    const cur = setsFor(x)
+    const done = !cur[i].done
+    update(x, cur.map((r, k) => (k === i ? { ...r, done } : r)))
+    if (done) {
       const sec = restSeconds(which === 'upper' ? 'upper' : 'legs', week.phase, index)
       setRest((r) => ({ sec, n: (r?.n ?? 0) + 1 }))
     }
   }
 
+  async function saveSets(): Promise<string | null> {
+    if (!session) return null
+    const rows: GymSet[] = steps.flatMap((x) =>
+      setsFor(x)
+        .map((r, i) => ({ r, i }))
+        .filter(({ r }) => r.done)
+        .map(({ r, i }) => ({ date: today, session, exercise_id: x.ex.id, set_no: i + 1, kg: parseNum(r.kg), reps: parseNum(r.reps) })),
+    )
+    for (const x of steps) {
+      const kg = [...setsFor(x)].reverse().find((r) => r.done && r.kg)?.kg
+      if (kg) writeStore(`gym.kg.${x.ex.id}`, kg)
+    }
+    try {
+      await saveGymSession(today, session, rows)
+      return null
+    } catch (e) {
+      return (e as Error).message
+    }
+  }
+
   async function markDone() {
     tap()
-    if (done) return toast('Schon als erledigt gespeichert.')
+    if (done && !tracked) return toast('Schon als erledigt gespeichert.')
     // Ein Bein- oder Ganzkörper-Eintrag bleibt stehen, Stabi zählt dann nicht extra.
     if (which === 'stabi' && current && current.focus !== 'core') return toast('Heute ist schon Krafttraining eingetragen.')
     setSaving(true)
@@ -193,11 +243,14 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
       else {
         const focus = mergeFocus(current?.focus, which)
         const hard = which === 'legs' ? legs.hard || !!current?.hard : focus === 'full' ? !!current?.hard : true
-        await log.setGym(today, { focus, hard })
+        if (!done) await log.setGym(today, { focus, hard })
         if (which === 'upper') writeStore(UPPER_KEY, variant)
       }
+      const failed = await saveSets()
       setRest(null)
-      toast(which === 'legs' ? 'Gespeichert: Beintraining erledigt.' : which === 'upper' ? `Gespeichert: Oberkörper ${variant} erledigt.` : 'Gespeichert: Stabi erledigt.')
+      if (failed) toast(failed, 'error')
+      else if (done) toast('Gespeichert: Sätze aktualisiert.')
+      else toast(which === 'legs' ? 'Gespeichert: Beintraining erledigt.' : which === 'upper' ? `Gespeichert: Oberkörper ${variant} erledigt.` : 'Gespeichert: Stabi erledigt.')
       onClose()
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -230,7 +283,7 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
             </div>
           )}
           <button disabled={saving} onClick={markDone} className="min-h-12 w-full rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
-            {done ? 'Erledigt ✓' : saving ? 'Speichern …' : tracked && finished < total ? 'Training beenden und speichern' : 'Erledigt'}
+            {done && !tracked ? 'Erledigt ✓' : done ? 'Sätze speichern' : saving ? 'Speichern …' : tracked && finished < total ? 'Training beenden und speichern' : 'Erledigt'}
           </button>
         </>
       }
@@ -253,8 +306,11 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
               n={i + 1}
               s={x}
               track={{
-                done: doneSets[x.ex.id] ?? 0,
-                onSet: (k) => toggleSet(x.ex.id, k, i),
+                sets: setsFor(x),
+                last: lastSets(history, x.ex.id, today),
+                allowUp: week.phase !== 'taper',
+                onToggle: (k) => toggleSet(x, k, i),
+                onEdit: (k, f, v) => edit(x, k, f, v),
               }}
             />
           ))}
@@ -288,8 +344,11 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
               n={i + 1}
               s={x}
               track={{
-                done: doneSets[x.ex.id] ?? 0,
-                onSet: (k) => toggleSet(x.ex.id, k, i),
+                sets: setsFor(x),
+                last: lastSets(history, x.ex.id, today),
+                allowUp: week.phase !== 'taper',
+                onToggle: (k) => toggleSet(x, k, i),
+                onEdit: (k, f, v) => edit(x, k, f, v),
               }}
             />
           ))}
@@ -337,13 +396,41 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
   )
 }
 
-function ExerciseCard({ n, s, hard, track }: { n: number; s: Prescribed; hard?: boolean; track?: { done: number; onSet: (i: number) => void } }) {
-  const sets = setsOf(s.dose)
-  const complete = track && track.done >= sets
+interface SetDraft {
+  kg: string
+  reps: string
+  done: boolean
+}
+type Draft = Record<string, SetDraft[]>
+
+const kgText = (v: number | null | undefined) => (v == null ? '' : String(v).replace('.', ','))
+
+/** Startwerte: wie beim letzten Mal, sonst das gemerkte Gewicht und das untere Ende der Wiederholungen. */
+function startSets(x: Prescribed, last: GymSet[]): SetDraft[] {
+  const range = repRange(x.dose)
+  const fallbackKg = readStore<string>(`gym.kg.${x.ex.id}`, '')
+  return Array.from({ length: setsOf(x.dose) }, (_, i) => {
+    const prev = last[i] ?? last.at(-1)
+    return {
+      kg: prev ? kgText(prev.kg) : fallbackKg,
+      reps: prev?.reps != null ? String(prev.reps) : range ? String(range[0]) : '',
+      done: false,
+    }
+  })
+}
+
+interface Track {
+  sets: SetDraft[]
+  last: GymSet[]
+  allowUp: boolean
+  onToggle: (i: number) => void
+  onEdit: (i: number, field: 'kg' | 'reps', value: string) => void
+}
+
+function ExerciseCard({ n, s, hard, track }: { n: number; s: Prescribed; hard?: boolean; track?: Track }) {
+  const complete = track && track.sets.every((r) => r.done)
   const [open, setOpen] = useState(!track)
-  // Gewicht pro Übung wird auf dem Gerät gemerkt, als Startwert fürs nächste Mal.
-  const kgKey = `gym.kg.${s.ex.id}`
-  const [kg, setKg] = useState<string>(() => readStore(kgKey, ''))
+  const hint = track ? progression(track.last, s.dose, track.allowUp) : null
   return (
     <Card className={complete ? 'opacity-70' : ''}>
       <div className="flex items-start gap-3">
@@ -359,58 +446,86 @@ function ExerciseCard({ n, s, hard, track }: { n: number; s: Prescribed; hard?: 
             <Pill color="var(--series-4)">{s.dose}</Pill>
           </button>
           <div className="mt-0.5 text-xs text-ink-3">{s.ex.target}</div>
-          {track && (
-            <div className="mt-3 flex items-center gap-2">
-              {Array.from({ length: sets }, (_, i) => (
-                <button
-                  key={i}
-                  onClick={() => track.onSet(i)}
-                  aria-pressed={i < track.done}
-                  aria-label={`Satz ${i + 1} ${i < track.done ? 'erledigt' : 'offen'}`}
-                  className={`h-11 max-w-16 min-w-11 flex-1 rounded-full text-sm font-semibold tabular-nums transition-colors duration-200 ${i < track.done ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}
-                >
-                  {i < track.done ? '✓' : i + 1}
-                </button>
-              ))}
-              <label className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-ink-3">
+          {track && track.last.length > 0 && (
+            <div className="mt-1.5 text-xs text-ink-2">
+              Letztes Mal ({shortDate(track.last[0].date)}): <span className="font-semibold tabular-nums">{fmtSets(track.last)}</span>
+            </div>
+          )}
+          {hint && (
+            <div className="mt-1 text-xs" style={{ color: hint.kind === 'up' ? 'var(--good)' : 'var(--ink-3)' }}>
+              {hint.kind === 'up' ? '↑ ' : ''}
+              {hint.text}
+            </div>
+          )}
+        </div>
+      </div>
+      {track && (
+        <div className="mt-3 space-y-2">
+          {track.sets.map((r, i) => (
+            <div key={i} className={`flex items-center gap-2 transition-opacity duration-200 ${r.done ? 'opacity-60' : ''}`}>
+              <span className="w-11 shrink-0 text-xs text-ink-3">Satz {i + 1}</span>
+              <label className="flex items-center gap-1 text-xs text-ink-3">
                 <input
                   inputMode="decimal"
-                  value={kg}
+                  enterKeyHint="next"
+                  value={r.kg}
                   placeholder="–"
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/[^\d.,]/g, '').slice(0, 5)
-                    setKg(v)
-                    writeStore(kgKey, v)
-                  }}
-                  className="h-11 w-16 rounded-xl border border-line bg-surface-solid text-center font-semibold text-ink tabular-nums"
-                  aria-label={`Gewicht für ${s.ex.name} in kg`}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => track.onEdit(i, 'kg', e.target.value.replace(/[^\d.,]/g, '').slice(0, 5))}
+                  className="h-11 w-[4.5rem] rounded-xl border border-line bg-surface-solid text-center text-[15px] font-semibold text-ink tabular-nums"
+                  aria-label={`Satz ${i + 1}: Gewicht in kg`}
                 />
                 kg
               </label>
+              <label className="flex items-center gap-1 text-xs text-ink-3">
+                <input
+                  inputMode="numeric"
+                  enterKeyHint="done"
+                  value={r.reps}
+                  placeholder="–"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => track.onEdit(i, 'reps', e.target.value.replace(/\D/g, '').slice(0, 3))}
+                  className="h-11 w-14 rounded-xl border border-line bg-surface-solid text-center text-[15px] font-semibold text-ink tabular-nums"
+                  aria-label={`Satz ${i + 1}: Wiederholungen`}
+                />
+                Wdh.
+              </label>
+              <button
+                onClick={() => track.onToggle(i)}
+                aria-pressed={r.done}
+                aria-label={`Satz ${i + 1} ${r.done ? 'erledigt, Haken entfernen' : 'abhaken'}`}
+                className={`ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors duration-200 ${r.done ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}
+              >
+                {r.done ? '✓' : i + 1}
+              </button>
             </div>
-          )}
-          {open && (
-            <>
-              <ol className="mt-3 list-decimal space-y-1 pl-4 text-sm text-ink-2">
-                {s.ex.how.map((h) => (
-                  <li key={h}>{h}</li>
-                ))}
-              </ol>
-              {s.ex.easier && <p className="mt-2 text-xs text-ink-2">Leichter: {s.ex.easier}</p>}
-              {(hard || track) && s.ex.harder && <p className="mt-1 text-xs text-ink-2">Schwerer: {s.ex.harder}</p>}
-              <p className="mt-2 text-xs text-ink-3">{s.ex.why}</p>
-            </>
-          )}
-          {track && !open && (
-            <button onClick={() => setOpen(true)} className="mt-2 text-xs font-semibold text-accent">
-              So geht's und warum
-            </button>
-          )}
+          ))}
         </div>
+      )}
+      <div className="pl-10">
+        {open && (
+          <>
+            <ol className="mt-3 list-decimal space-y-1 pl-4 text-sm text-ink-2">
+              {s.ex.how.map((h) => (
+                <li key={h}>{h}</li>
+              ))}
+            </ol>
+            {s.ex.easier && <p className="mt-2 text-xs text-ink-2">Leichter: {s.ex.easier}</p>}
+            {(hard || track) && s.ex.harder && <p className="mt-1 text-xs text-ink-2">Schwerer: {s.ex.harder}</p>}
+            <p className="mt-2 text-xs text-ink-3">{s.ex.why}</p>
+          </>
+        )}
+        {track && !open && (
+          <button onClick={() => setOpen(true)} className="mt-2 min-h-8 text-xs font-semibold text-accent">
+            So geht's und warum
+          </button>
+        )}
       </div>
     </Card>
   )
 }
+
+const shortDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' })
 
 /** Pause nach einem Satz: läuft rückwärts, vibriert am Ende kurz. */
 function RestTimer({ total, onDone }: { total: number; onDone: () => void }) {
