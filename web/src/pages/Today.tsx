@@ -18,7 +18,7 @@ import { ProposalCard, ReadinessCard } from './TodayReadiness'
 import { CheckInCard } from './CheckIn'
 import { FeedbackCard } from './PlanFeedback'
 import { MobilityCard } from './Mobility'
-import { StrengthCard } from './Strength'
+import { GymCard, StrengthCard } from './Strength'
 import { HeatCard } from './Heat'
 import { WeekReviewCard } from './WeekReview'
 
@@ -137,6 +137,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
 
       <Section title="Eintragen">
         <CheckInCard log={log} plan={plan} today={today} strengthToday={data.activities.some((a) => a.local_date === today && /strength|fitness_equipment/.test(a.sport))} />
+        <GymCard workouts={plan.workouts} log={log} today={today} />
       </Section>
 
       <Section title="Training">

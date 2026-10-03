@@ -2,7 +2,7 @@
 // Keine festen Plan-Einheiten, sondern Vorschläge, die sich um die harten Laufeinheiten herum legen.
 // Kreuzheben ist bewusst nicht dabei; die hintere Kette trainieren Hip Thrust und Nordic Curls.
 
-import type { GymByDate } from './dailyLog'
+import type { GymByDate, GymFocus } from './dailyLog'
 import { addDays } from './plan/dates'
 import type { Kind, Phase, PlanWorkout } from './plan/types'
 
@@ -371,3 +371,209 @@ export const STRENGTH_EVIDENCE: { title: string; text: string; source: string }[
 
 export const NO_DEADLIFT =
   'Kreuzheben ist bewusst nicht dabei. Gesäß und Beinrückseite trainieren Hip Thrust und Nordic Curls ohne Last auf der Wirbelsäule, die Rumpfübungen sind rückenschonend nach McGill. Hast du dabei Schmerzen im Rücken, lass das ärztlich oder physiotherapeutisch abklären.'
+
+// ---------- Oberkörper ----------
+// Ziel: Muskelaufbau, der das Laufen unterstützt (Haltung, Armschwung, Rumpfstabilität) und den Rücken schont.
+// Zwei Varianten A und B im Wechsel: so trifft jede Muskelgruppe bei 2 Einheiten pro Woche etwa 10 Sätze.
+
+const UPPER_EX: Record<string, StrengthExercise> = {
+  dbBench: {
+    id: 'dbBench',
+    name: 'Kurzhantel-Bankdrücken',
+    target: 'Brust, vordere Schulter, Trizeps',
+    how: ['Flach auf der Bank, Füße fest am Boden, Schulterblätter nach hinten unten ziehen.', 'Hanteln über der Brust, Ellbogen etwa 45 Grad vom Körper.', 'Kontrolliert absenken, bis die Hanteln neben der Brust sind, dann kräftig hochdrücken.'],
+    why: 'Kurzhanteln lassen jeden Arm für sich arbeiten und schonen die Schultern mehr als die Langhantel.',
+    easier: 'Liegestütz, bei Bedarf mit Händen auf einer Bank.',
+  },
+  latPull: {
+    id: 'latPull',
+    name: 'Latzug',
+    target: 'Breiter Rückenmuskel, Bizeps',
+    how: ['Oberschenkel unter dem Polster, Griff etwas breiter als schulterbreit.', 'Brust leicht anheben, Stange zur oberen Brust ziehen, Ellbogen nach unten.', 'Langsam zurück, bis die Arme gestreckt sind.'],
+    why: 'Ein kräftiger oberer Rücken hält die Haltung aufrecht, auch wenn du am Ende eines langen Laufs müde wirst.',
+    harder: 'Klimmzüge, bei Bedarf mit Band oder Maschine unterstützt.',
+  },
+  ohp: {
+    id: 'ohp',
+    name: 'Schulterdrücken sitzend',
+    target: 'Schultern, Trizeps',
+    how: ['Auf der Bank mit Rückenlehne, Rücken fest angelehnt.', 'Kurzhanteln auf Schulterhöhe, Handflächen nach vorn.', 'Über den Kopf drücken, ohne ins Hohlkreuz zu gehen, langsam zurück.'],
+    why: 'Sitzend mit Lehne trainierst du die Schultern kräftig, ohne den unteren Rücken zu belasten.',
+  },
+  cableRow: {
+    id: 'cableRow',
+    name: 'Rudern am Kabelzug sitzend',
+    target: 'Mittlerer Rücken, hintere Schulter',
+    how: ['Aufrecht sitzen, Füße an der Platte, Knie leicht gebeugt.', 'Griff zum Bauch ziehen, Schulterblätter zusammen.', 'Kurz halten, langsam zurück, Oberkörper bleibt ruhig.'],
+    why: 'Gleicht das Drücken aus und stärkt die Muskeln, die beim Laufen die Schultern hinten halten. Der Rücken bleibt gestützt und ruhig.',
+  },
+  lateral: {
+    id: 'lateral',
+    name: 'Seitheben',
+    target: 'Seitliche Schulter',
+    how: ['Stehend, leichte Kurzhanteln seitlich.', 'Arme mit leicht gebeugten Ellbogen seitlich bis Schulterhöhe heben.', 'Langsam ablassen, nicht schwingen.'],
+    why: 'Die seitliche Schulter wächst vor allem mit vielen Wiederholungen bei leichtem Gewicht.',
+  },
+  curl: {
+    id: 'curl',
+    name: 'Bizeps-Curls',
+    target: 'Bizeps',
+    how: ['Stehend, Kurzhanteln mit Handflächen nach vorn.', 'Ellbogen bleiben am Körper, Hanteln hochbeugen.', '2 s langsam ablassen.'],
+    why: 'Gezieltes Armtraining für den Muskelaufbau. Die Arme bekommen bei den Zugübungen schon etwas ab, das hier ergänzt es.',
+  },
+  pushdown: {
+    id: 'pushdown',
+    name: 'Trizepsdrücken am Kabel',
+    target: 'Trizeps',
+    how: ['Vor dem Kabelzug, Seil oder Stange auf Brusthöhe.', 'Ellbogen am Körper, Unterarme nach unten strecken.', 'Langsam zurück bis etwa 90 Grad.'],
+    why: 'Der Trizeps macht den größten Teil des Oberarms aus. Isoliert am Kabel geht das gelenkschonend.',
+  },
+  incline: {
+    id: 'incline',
+    name: 'Schrägbankdrücken mit Kurzhanteln',
+    target: 'Obere Brust, Schulter',
+    how: ['Bank auf etwa 30 Grad, Schulterblätter nach hinten unten.', 'Hanteln über der oberen Brust.', 'Kontrolliert absenken und hochdrücken.'],
+    why: 'Ergänzt das flache Drücken aus Variante A und trifft die obere Brust stärker.',
+  },
+  pullup: {
+    id: 'pullup',
+    name: 'Klimmzug (unterstützt)',
+    target: 'Rücken, Bizeps',
+    how: ['An der Klimmzug-Maschine oder mit Band, Griff schulterbreit.', 'Brust zur Stange ziehen, Schultern weg von den Ohren.', 'Langsam ablassen, bis die Arme fast gestreckt sind.'],
+    why: 'Zieht mit dem eigenen Körpergewicht und trainiert den Rumpf mit. Mit Unterstützung lässt sich die Last genau einstellen.',
+    easier: 'Latzug.',
+  },
+  oneArmRow: {
+    id: 'oneArmRow',
+    name: 'Einarmiges Kurzhantelrudern',
+    target: 'Rücken, hintere Schulter',
+    how: ['Eine Hand und ein Knie auf der Bank, Rücken gerade und abgestützt.', 'Hantel Richtung Hüfte ziehen, Ellbogen nah am Körper.', 'Langsam ablassen, Oberkörper dreht nicht mit.'],
+    why: 'Durch das Abstützen bleibt die Wirbelsäule entlastet, anders als beim vorgebeugten Rudern mit der Langhantel.',
+    sides: true,
+  },
+  facePull: {
+    id: 'facePull',
+    name: 'Face Pulls',
+    target: 'Hintere Schulter, Rotatorenmanschette',
+    how: ['Seil am Kabelzug auf Augenhöhe.', 'Zum Gesicht ziehen, Hände dabei nach außen, Ellbogen hoch.', 'Kurz halten, langsam zurück.'],
+    why: 'Kräftigt die kleinen Schultermuskeln und gleicht viel Drücken aus. Gut für Haltung und gesunde Schultern.',
+  },
+  dips: {
+    id: 'dips',
+    name: 'Dips an der Maschine',
+    target: 'Trizeps, Brust',
+    how: ['An der Dip-Maschine oder unterstützt am Barren.', 'Oberkörper leicht nach vorn, Ellbogen nach hinten beugen.', 'Bis etwa 90 Grad absenken, kräftig hochdrücken.'],
+    why: 'Viel Muskelarbeit für Trizeps und Brust mit einstellbarer Last.',
+    easier: 'Enge Liegestütz.',
+  },
+  hammer: {
+    id: 'hammer',
+    name: 'Hammer-Curls',
+    target: 'Bizeps, Unterarm',
+    how: ['Kurzhanteln mit Handflächen zueinander.', 'Ellbogen am Körper, hochbeugen.', '2 s langsam ablassen.'],
+    why: 'Trifft neben dem Bizeps auch den Oberarmmuskel darunter und den Unterarm.',
+  },
+  pallof: {
+    id: 'pallof',
+    name: 'Pallof Press',
+    target: 'Rumpf gegen Drehung',
+    how: ['Seitlich zum Kabelzug, Griff mit beiden Händen vor der Brust.', 'Arme gerade nach vorn strecken, der Zug will dich verdrehen.', '2 s halten, ohne nachzugeben, zurück zur Brust.'],
+    why: 'Beim Laufen dreht sich der Körper bei jedem Schritt. Diese Übung trainiert, dagegenzuhalten, und schont dabei die Wirbelsäule.',
+    sides: true,
+  },
+}
+
+export type UpperVariant = 'A' | 'B'
+
+export interface UpperSession {
+  title: string
+  focus: string
+  minutes: number
+  steps: Prescribed[]
+}
+
+/** Oberkörper für Muskelaufbau. Im Taper weniger Sätze, damit nichts müde macht. */
+export function upperSession(variant: UpperVariant, phase: Phase | null): UpperSession {
+  const taper = phase === 'taper'
+  const big = taper ? '2 × 8–10' : '3 × 6–10'
+  const mid = taper ? '2 × 10–12' : '3 × 8–12'
+  const small = taper ? '2 × 12–15' : '3 × 12–15'
+  const ex = UPPER_EX
+  const steps: Prescribed[] =
+    variant === 'A'
+      ? [
+          { ex: ex.dbBench, dose: big },
+          { ex: ex.latPull, dose: big },
+          { ex: ex.ohp, dose: mid },
+          { ex: ex.cableRow, dose: mid },
+          { ex: ex.lateral, dose: small },
+          { ex: ex.curl, dose: mid },
+          { ex: ex.pushdown, dose: mid },
+        ]
+      : [
+          { ex: ex.incline, dose: big },
+          { ex: ex.pullup, dose: big },
+          { ex: ex.oneArmRow, dose: `${mid} je Seite` },
+          { ex: ex.facePull, dose: small },
+          { ex: ex.dips, dose: mid },
+          { ex: ex.hammer, dose: mid },
+          { ex: ex.pallof, dose: `${taper ? 2 : 3} × 10 je Seite` },
+        ]
+  return {
+    title: `Oberkörper ${variant}`,
+    focus: taper
+      ? 'Rennwochen: weniger Sätze, Gewicht wie gewohnt. So bleibt die Muskulatur erhalten, ohne müde zu machen.'
+      : 'Muskelaufbau: jeden Satz bis kurz vor Schluss, 1–2 saubere Wiederholungen bleiben übrig. Schaffst du das obere Ende der Spanne, nimm beim nächsten Mal mehr Gewicht. 2 min Pause bei den ersten beiden Übungen, sonst 90 s.',
+    minutes: taper ? 35 : 55,
+    steps,
+  }
+}
+
+export const UPPER_WARMUP = '5 min Rudergerät locker, 10 Armkreisen vor und zurück, dann 1–2 leichte Sätze der ersten Übung.'
+
+/** Was Studien zu Oberkörpertraining für Läufer und Muskelaufbau zeigen. */
+export const UPPER_EVIDENCE: { title: string; text: string; source: string }[] = [
+  {
+    title: 'Laufen bremst den Oberkörper kaum',
+    text: 'Ausdauertraining kann den Muskelaufbau dämpfen, vor allem an den Beinen und vor allem durch Laufen. Am Oberkörper ist der Effekt gering. Muskelaufbau oben und Lauftraining passen also gut zusammen.',
+    source: 'Wilson et al. 2012, J Strength Cond Res; Schumann et al. 2022, Sports Med',
+  },
+  {
+    title: 'Genug Sätze pro Woche',
+    text: 'Mehr Sätze pro Muskel und Woche bringen mehr Muskelaufbau, mit etwa 10 Sätzen als gutem Ziel. Mit A und B im Wechsel, zweimal pro Woche, kommt jede große Muskelgruppe ungefähr dahin. Zweimal pro Woche ist dabei etwas besser als einmal.',
+    source: 'Schoenfeld et al. 2017, J Sports Sci; Schoenfeld et al. 2016, Sports Med',
+  },
+  {
+    title: 'Bis kurz vor Schluss',
+    text: 'Muskeln wachsen über einen weiten Bereich von etwa 6 bis 30 Wiederholungen ähnlich gut, solange die Sätze nah an die Erschöpfung gehen. 1 bis 2 Wiederholungen vor dem Versagen reichen und schonen die Erholung.',
+    source: 'Schoenfeld et al. 2017, J Strength Cond Res; Refalo et al. 2023, Sports Med',
+  },
+  {
+    title: 'Nutzen fürs Laufen',
+    text: 'Der Armschwung gleicht die Drehung des Körpers aus und spart Energie. Ein kräftiger Rücken und Rumpf halten die Haltung auch müde stabil. Dass Oberkörpertraining direkt schneller macht, ist nicht belegt; es geht um Haltung, Stabilität und Gesundheit.',
+    source: 'Arellano & Kram 2014, J Exp Biol',
+  },
+  {
+    title: 'Gesundheit und Ernährung',
+    text: 'Krafttraining zweimal pro Woche wird für alle Erwachsenen empfohlen und hängt mit einem geringeren Sterberisiko zusammen. Für Muskelaufbau helfen etwa 1,6 g Eiweiß pro kg Körpergewicht am Tag.',
+    source: 'Bull et al. 2020, Br J Sports Med (WHO-Leitlinie); Momma et al. 2022, Br J Sports Med; Morton et al. 2018, Br J Sports Med',
+  },
+]
+
+/** Anzahl Sätze aus einer Dosis wie „3 × 8–10 je Bein“; Halte- und Sprungangaben zählen als ein Satz. */
+export function setsOf(dose: string): number {
+  const m = /^(\d+)\s*×/.exec(dose)
+  return m ? Number(m[1]) : 1
+}
+
+/** Pause nach einem Satz in Sekunden. */
+export function restSeconds(kind: 'legs' | 'upper', phase: Phase | null, index: number): number {
+  if (kind === 'legs') return phase === 'build' || phase === 'peak' ? 150 : 90
+  return index < 2 ? 120 : 90
+}
+
+/** Bein- und Oberkörpertraining am selben Tag ergeben Ganzkörper. */
+export function mergeFocus(current: GymFocus | undefined, add: 'legs' | 'upper'): GymFocus {
+  if (!current || current === 'core' || current === add) return add
+  return 'full'
+}
