@@ -1,4 +1,4 @@
-// Kraft- und Stabi-Vorschläge für Läufer: einmal pro Woche Beine im Gym, zweimal kurze Stabi-Einheiten.
+// Kraft- und Stabi-Vorschläge für Läufer: einmal pro Woche Beine im Gym, zweimal Oberkörper, zweimal kurze Stabi-Einheiten.
 // Keine festen Plan-Einheiten, sondern Vorschläge, die sich um die harten Laufeinheiten herum legen.
 // Kreuzheben ist bewusst nicht dabei; die hintere Kette trainieren Hip Thrust und Nordic Curls.
 
@@ -18,6 +18,8 @@ const KEY_KINDS: Kind[] = ['intervals', 'tempo', 'race_pace', 'fartlek', 'long',
 /** In den letzten 10 Tagen vor dem Rennen kein schweres Beintraining mehr. */
 const NO_LEGS_BEFORE_RACE = 10
 const STABI_PER_WEEK = 2
+/** Zwei Oberkörpertage pro Woche: für Muskelaufbau besser belegt als einer (Schoenfeld 2016). */
+const UPPER_PER_WEEK = 2
 
 export interface WeekStrength {
   /** Tag für Beine im Gym, null wenn diese Woche keiner passt (Rennwoche). */
@@ -27,6 +29,9 @@ export interface WeekStrength {
   legsAfterKey: boolean
   stabi: string[]
   stabiDone: string[]
+  /** Tage für Oberkörper im Gym (A und B im Wechsel). */
+  upper: string[]
+  upperDone: string[]
   phase: Phase | null
   raceWeek: boolean
 }
@@ -95,7 +100,29 @@ export function weekStrength(monday: string, workouts: PlanWorkout[], gym: GymBy
   }
   stabi.sort()
 
-  return { legs: raceWeek && !legsDone ? null : legs, legsDone, legsAfterKey, stabi, stabiDone, phase, raceWeek }
+  // Oberkörper: belastet die Beine kaum, passt deshalb auch zu Lauftagen. Nicht am Beintag, nicht
+  // an zwei Tagen hintereinander, nicht am Renntag oder dem Tag davor; in der Rennwoche nur einmal.
+  const upperDone = days.filter((d) => gym[d]?.focus === 'upper' || gym[d]?.focus === 'full')
+  const legsDay = raceWeek && !legsDone ? null : legs
+  const upperNeed = Math.max(0, (raceWeek ? 1 : UPPER_PER_WEEK) - upperDone.length)
+  const upper = [...upperDone]
+  const upperScore = (d: string) => {
+    const runs = on(d).filter((w) => w.sport === 'run')
+    let sc = runs.length && !runs.some((w) => w.kind === 'long') ? 2 : runs.length ? 0 : 1
+    if (stabi.includes(d)) sc -= 1
+    return sc
+  }
+  const upperCandidates = open
+    .filter((d) => d !== legsDay && !upperDone.includes(d) && !races.includes(d) && daysToRace(d) >= 2)
+    .sort((a, b) => upperScore(b) - upperScore(a) || a.localeCompare(b))
+  for (const d of upperCandidates) {
+    if (upper.length - upperDone.length >= upperNeed) break
+    if (upper.some((u) => Math.abs(Date.parse(u) - Date.parse(d)) < 2 * 86400_000)) continue
+    upper.push(d)
+  }
+  upper.sort()
+
+  return { legs: legsDay, legsDone, legsAfterKey, stabi, stabiDone, upper, upperDone, phase, raceWeek }
 }
 
 // ---------- Übungen ----------

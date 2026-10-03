@@ -32,6 +32,16 @@ describe('weekStrength', () => {
     expect(s.legs! >= day(3)).toBe(true)
     expect(weekStrength(MON, week, { [day(2)]: { focus: 'legs', hard: true } }, MON).legsDone).toBe(day(2))
   })
+  it('legt zwei Oberkörpertage mit Abstand, nicht auf den Beintag', () => {
+    const s = weekStrength(MON, week, {}, MON)
+    expect(s.upper).toHaveLength(2)
+    expect(s.upper).not.toContain(s.legs)
+    expect(Date.parse(s.upper[1]) - Date.parse(s.upper[0])).toBeGreaterThanOrEqual(2 * 86400_000)
+    // Ganzkörper zählt als Beine und Oberkörper.
+    const full = weekStrength(MON, week, { [day(0)]: { focus: 'full', hard: true } }, day(1))
+    expect(full.upperDone).toEqual([day(0)])
+    expect(full.upper).toHaveLength(2)
+  })
   it('weicht nach eine harte Einheit aus, wenn kein Tag frei ist', () => {
     const packed = [w(0, 'intervals'), w(1, 'tempo'), w(2, 'easy'), w(3, 'fartlek'), w(4, 'easy'), w(5, 'intervals'), w(6, 'long')]
     const s = weekStrength(MON, packed, {}, MON)

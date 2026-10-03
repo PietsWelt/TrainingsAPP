@@ -322,10 +322,10 @@ function runEasy(km: number, p: Paces | null, recovery = false): Draft {
   }
 }
 
-function runWeek(type: RunEventType, phase: Phase, pw: number, km: number, roles: RunRole[], p: Paces | null): Map<RunRole, Draft> {
+function runWeek(type: RunEventType, phase: Phase, pw: number, km: number, roles: RunRole[], p: Paces | null, longCap = Infinity): Map<RunRole, Draft> {
   const spec = RUN[type]
   const qCount = roles.filter((r) => r === 'Q1' || r === 'Q2').length
-  const long = Math.min(spec.longMax, Math.max(spec.longMin * (phase === 'taper' ? 0.7 : 1), km * 0.3))
+  const long = Math.min(longCap, spec.longMax, Math.max(spec.longMin * (phase === 'taper' ? 0.7 : 1), km * 0.3))
   const q = Math.min(16, Math.max(6, km * 0.17))
   const easyRoles = roles.filter((r) => r === 'E' || r === 'R').length
   // Ein lockerer Lauf soll nie länger als ~70 % des langen Laufs werden; bei wenigen Tagen sinkt dann der Wochenumfang.
@@ -479,8 +479,15 @@ export function generatePlan(event: RaceEvent, fitness: Fitness, today: string, 
     volumes = volumesFor(phases, Math.min(s.peakH * 0.75, Math.max(s.minH, current)), s.peakH)
   } else {
     const s = spec as RunSpec
-    volumes = volumesFor(phases, Math.min(s.peakKm * 0.75, Math.max(s.minKm, fitness.weeklyRunKm)), s.peakKm)
+    // Kein Sprung zum Start: höchstens 15 % über deinem Schnitt der letzten 6 Wochen, auch wenn die
+    // Renndistanz eigentlich mehr verlangt. Ohne Laufdaten gilt der Mindestumfang.
+    const current = fitness.weeklyRunKm
+    const from = current > 0 ? Math.max(current, Math.min(s.minKm, current * 1.15)) : s.minKm
+    volumes = volumesFor(phases, Math.min(s.peakKm * 0.75, from), s.peakKm)
   }
+  // Langer Lauf höchstens 10 % länger als dein bisher längster der letzten 30 Tage bzw. des Plans
+  // (Frandsen et al. 2025, BJSM: Verletzungsrisiko steigt bei Einzelläufen deutlich darüber).
+  let longest = fitness.longestRunKm
 
   const out: PlanWorkout[] = []
   // Die Rennwoche beginnt 6 Tage vor dem Rennen; normale Wochen enden davor.
@@ -508,7 +515,8 @@ export function generatePlan(event: RaceEvent, fitness: Fitness, today: string, 
       for (const [day, role] of layout) push(addDays(monday, day), w + 1, phase, drafts.get(role)!)
     } else {
       const layout = rotate(RUN_TEMPLATES[dpw], 6, event.long_day)
-      const drafts = runWeek(event.type as RunEventType, phase, pw, volumes[w], layout.map(([, r]) => r), paces)
+      const drafts = runWeek(event.type as RunEventType, phase, pw, volumes[w], layout.map(([, r]) => r), paces, longest > 0 ? longest * 1.1 : Infinity)
+      if (layout.some(([, r]) => r === 'L')) longest = Math.max(longest, drafts.get('L')!.distance_km ?? 0)
       for (const [day, role] of layout) push(addDays(monday, day), w + 1, phase, drafts.get(role)!)
     }
   }

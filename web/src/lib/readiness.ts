@@ -57,7 +57,7 @@ export function legFatigue(date: string, gym: GymByDate): { score: number; detai
 }
 
 /** Trainingslast eines Tages; ohne Garmin-Wert grob aus der Dauer geschätzt. */
-function loadOf(a: Activity): number {
+export function loadOf(a: Activity): number {
   if (a.training_load != null) return a.training_load
   return ((a.duration_s ?? 0) / 60) * 1.2
 }

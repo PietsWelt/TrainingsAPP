@@ -21,6 +21,7 @@ import { MobilityCard } from './Mobility'
 import { GymCard, StrengthCard } from './Strength'
 import { HeatCard } from './Heat'
 import { WeekReviewCard } from './WeekReview'
+import { OverloadCard } from './Overload'
 
 function garminStatus(score: number): { status: Status; text: string } {
   if (score >= 75) return { status: 'good', text: 'Bereit für Belastung' }
@@ -56,6 +57,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
   return (
     <div className="page-in desk-cols space-y-3">
       {own && <ReadinessCard r={own} garmin={readiness} />}
+      <OverloadCard days={data.days} activities={data.activities} workouts={plan.workouts} today={today} />
       <ProposalCard plan={plan} r={own} today={today} log={log} />
       <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
       <HeatCard workout={plan.workouts.find((w) => w.date === today && w.sport === 'run' && w.status === 'planned')} />
