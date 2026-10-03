@@ -6,6 +6,7 @@ import { sportGroup } from '../format'
 import { personalAet, shareAbove, shareBelow, type Aet } from '../aet'
 import { heatPct, HOT_PCT } from '../heat'
 import type { Activity } from '../types'
+import { isPartial } from './adapt'
 import { fmtPace } from './generate'
 import type { Feedback, Kind, PlanWorkout, Step, WorkStep } from './types'
 
@@ -198,5 +199,6 @@ export function merge(...lists: PlanWorkout[][]): PlanWorkout[] {
 
 export function analysisFor(w: PlanWorkout, activities: Activity[] | undefined): Analysis | null {
   const a = w.activity_id != null ? activities?.find((x) => x.id === w.activity_id) : undefined
-  return a && sportGroup(a.sport) === w.sport ? analyzeRun(w, a, activities) : null
+  // Deutlich zu kurz: keine Bewertung, das Tempo wird dann auch nicht angepasst.
+  return a && sportGroup(a.sport) === w.sport && !isPartial(w, a) ? analyzeRun(w, a, activities) : null
 }

@@ -5,7 +5,7 @@ import { Card, Pill, Ring, SportIcon } from '../components/ui'
 import { dateLabel } from '../lib/format'
 import { guessType, handledIds, markHandled, openSuggestions, type GarminRace } from '../lib/garminRaces'
 import { tap } from '../lib/haptics'
-import { FEEDBACK_LABEL, progressOf, restoreOriginal } from '../lib/plan/adapt'
+import { coverage, FEEDBACK_LABEL, isPartial, progressOf, restoreOriginal } from '../lib/plan/adapt'
 import { addDays, daysBetween, localToday, mondayOf, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from '../lib/plan/dates'
 import type { GymByDate } from '../lib/dailyLog'
 import { WeekStrengthLine } from './Strength'
@@ -104,7 +104,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
 
       {selected && (
         <>
-          <EventHeader event={selected} workouts={workouts} today={today} onEdit={() => setEditing(selected)} />
+          <EventHeader event={selected} workouts={workouts} today={today} activities={activities} onEdit={() => setEditing(selected)} />
           <RaceCheck event={selected} workouts={workouts} activities={activities ?? []} records={records ?? []} predictions={predictions} today={today} />
           <WeekList activities={activities} workouts={workouts} all={plan.workouts} gym={gym ?? {}} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
         </>
@@ -167,11 +167,12 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
   )
 }
 
-function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; workouts: PlanWorkout[]; today: string; onEdit: () => void }) {
-  const p = progressOf(workouts, today)
+function EventHeader({ event, workouts, today, activities, onEdit }: { event: RaceEvent; workouts: PlanWorkout[]; today: string; activities?: Activity[]; onEdit: () => void }) {
+  const p = progressOf(workouts, today, activities)
   const weeks = Math.max(0, ...workouts.map((w) => w.week_index))
   const current = workouts.find((w) => w.date >= today) ?? workouts.at(-1)
-  const pct = p.total ? (p.done / p.total) * 100 : 0
+  // Deutlich zu kurze Einheiten zählen halb.
+  const pct = p.total ? ((p.done + p.partial / 2) / p.total) * 100 : 0
   const duePct = p.total ? (p.dueSoFar / p.total) * 100 : 0
   const days = p.daysToRace != null && p.daysToRace >= 0 ? p.daysToRace : null
   const span = workouts.length ? Math.max(1, daysBetween(workouts[0].date, event.date)) : 1
@@ -214,6 +215,7 @@ function EventHeader({ event, workouts, today, onEdit }: { event: RaceEvent; wor
             </div>
             <div className="mt-1.5 text-xs text-ink-2">
               {p.done} von {p.total} Einheiten
+              {p.partial > 0 && ` · ${p.partial} teilweise`}
               {p.dueSoFar > 0 && ` · ${p.doneSoFar}/${p.dueSoFar} bis heute`}
             </div>
           </div>
@@ -288,7 +290,7 @@ function Week({ monday, workouts, all, gym, today, activities, onOpen, onToggle 
                   {w.feedback && w.feedback !== 'ok' && ` · ${FEEDBACK_LABEL[w.feedback].toLowerCase()}`}
                 </span>
               </span>
-              <StatusMark w={w} today={today} replaced={replacedBy(w, activities?.find((a) => a.id === w.activity_id))} />
+              <StatusMark w={w} today={today} act={activities?.find((a) => a.id === w.activity_id)} />
             </button>
             {w.sport !== 'race' && w.status !== 'skipped' && <CheckButton w={w} onToggle={onToggle} />}
           </li>
@@ -299,13 +301,27 @@ function Week({ monday, workouts, all, gym, today, activities, onOpen, onToggle 
   )
 }
 
-function StatusMark({ w, today, replaced }: { w: PlanWorkout; today: string; replaced: string | null }) {
+function StatusMark({ w, today, act }: { w: PlanWorkout; today: string; act?: Activity }) {
+  const replaced = replacedBy(w, act)
   if (replaced) return <span className="text-xs text-ink-3">Ersetzt: {replaced}</span>
+  if (act && isPartial(w, act)) return <span className="text-xs" style={{ color: 'var(--warning)' }}>Teilweise · {Math.round((coverage(w, act) ?? 0) * 100)} %</span>
   if (w.status === 'done') return null
   if (w.status === 'skipped') return <span className="text-xs text-ink-3">Ausgelassen</span>
   if (w.date < today) return <span className="text-xs" style={{ color: 'var(--warning)' }}>▲ Offen</span>
   if (w.moved_from) return <span className="text-xs text-ink-3">Verschoben</span>
   return null
+}
+
+/** Hinweis im Detailblatt, wenn die Aktivität deutlich kürzer war als geplant. */
+function partialNote(w: PlanWorkout, activities?: Activity[]) {
+  const act = activities?.find((a) => a.id === w.activity_id)
+  if (!act || !isPartial(w, act)) return null
+  return (
+    <div className="mt-1 text-xs" style={{ color: 'var(--warning)' }}>
+      Teilweise: {Math.round((coverage(w, act) ?? 0) * 100)} % der geplanten Einheit. Zählt im Fortschritt halb, wird nicht nachgeholt, und das Tempo
+      der nächsten Einheiten bleibt unverändert.
+    </div>
+  )
 }
 
 /** Großer runder Haken zum direkten Abhaken in der Liste. */
@@ -393,6 +409,7 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
         </h1>
         <div className="mt-1 text-sm text-ink-2">{workoutAmount(w)}</div>
         {w.moved_from && <div className="mt-1 text-xs text-ink-3">Verschoben von {WEEKDAY_LONG[weekday(w.moved_from)]}</div>}
+        {partialNote(w, activities)}
         {w.original && <div className="mt-1 text-xs text-ink-3">Angepasst, ursprünglich: {w.original.title}</div>}
         {w.garmin_workout_id && w.status === 'planned' && <div className="mt-1 text-xs text-ink-3">⌚ Liegt auf deiner Uhr unter „Training“</div>}
       </div>
