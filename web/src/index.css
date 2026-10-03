@@ -91,6 +91,45 @@
     --blob-3: rgb(229 37 154 / 0.24);
   }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0c0a1f;
+  --surface: rgb(255 255 255 / 0.055);
+  --surface-solid: #17142f;
+  --surface-2: rgb(255 255 255 / 0.08);
+  --border: rgb(190 180 255 / 0.12);
+  --shadow: none;
+  --card-border: rgb(190 180 255 / 0.14);
+  --glass: rgb(16 13 40 / 0.72);
+  --text: #f1efff;
+  --text-2: #c4c0e4;
+  --text-3: #8d89b4;
+  --accent: #22d3ee;
+  --c-erh: #00a3c9;
+  --c-lock: #24ae56;
+  --c-hart: #d00078;
+  --c-schlaf: #7847d0;
+  --band: #2a2650;
+  --good: #3ccf74;
+  --warning: #f5a524;
+  --serious: #ff8a4c;
+  --critical: #ff5a64;
+  --zone-1: #7fd894;
+  --zone-2: #33b85a;
+  --zone-3: #f2c230;
+  --zone-4: #ff8a2a;
+  --zone-5: #ff4b55;
+  --g1: #22d3ee;
+  --g2: #7d5ee0;
+  --g3: #ff3fb0;
+  --hero-border: linear-gradient(135deg, rgb(34 211 238 / 0.7), rgb(125 94 224 / 0.55), rgb(255 63 176 / 0.7));
+  --hero-glow: 0 0 44px -14px rgb(0 190 230 / 0.35);
+  --btn: linear-gradient(90deg, #22d3ee, #a855f7);
+  --btn-text: #0c0a1f;
+  --blob-1: rgb(0 190 230 / 0.26);
+  --blob-2: rgb(125 94 224 / 0.30);
+  --blob-3: rgb(229 37 154 / 0.24);
+}
 
 @theme inline {
   --color-bg: var(--bg);
