@@ -393,7 +393,7 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
         </h1>
         <div className="mt-1 text-sm text-ink-2">{workoutAmount(w)}</div>
         {w.moved_from && <div className="mt-1 text-xs text-ink-3">Verschoben von {WEEKDAY_LONG[weekday(w.moved_from)]}</div>}
-        {w.original && <div className="mt-1 text-xs text-ink-3">An deine Readiness angepasst, ursprünglich: {w.original.title}</div>}
+        {w.original && <div className="mt-1 text-xs text-ink-3">Angepasst, ursprünglich: {w.original.title}</div>}
         {w.garmin_workout_id && w.status === 'planned' && <div className="mt-1 text-xs text-ink-3">⌚ Liegt auf deiner Uhr unter „Training“</div>}
       </div>
       {w.status === 'done' && w.sport !== 'race' && (

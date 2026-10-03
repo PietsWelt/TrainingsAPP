@@ -3,7 +3,7 @@ import type { Activity } from '../types'
 import { addDays } from './dates'
 import type { Fitness } from './types'
 
-/** Durchschnitt der letzten 6 Wochen als Startpunkt für den Plan. */
+/** Durchschnitt der letzten 6 Wochen als Startpunkt für den Plan, längster Lauf der letzten 30 Tage. */
 export function fitnessFrom(activities: Activity[], today: string): Fitness {
   const since = addDays(today, -42)
   const recent = activities.filter((a) => a.local_date > since && a.local_date <= today)
@@ -17,7 +17,8 @@ export function fitnessFrom(activities: Activity[], today: string): Fitness {
     if (g === 'run') {
       const km = (a.distance_m ?? 0) / 1000
       runKm += km / 6
-      longest = Math.max(longest, km)
+      // Längster Lauf nur aus den letzten 30 Tagen: Maßstab für die Länge des nächsten langen Laufs.
+      if (a.local_date > addDays(today, -30)) longest = Math.max(longest, km)
     }
   }
   return { weeklyRunKm: runKm, longestRunKm: longest, weeklyHours: hours }

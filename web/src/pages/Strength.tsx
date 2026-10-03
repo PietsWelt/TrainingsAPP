@@ -64,24 +64,26 @@ const nextUpper = (): UpperVariant => (readStore<UpperVariant>(UPPER_KEY, 'B') =
 export function StrengthCard({ workouts, log, today }: { workouts: PlanWorkout[]; log: DailyLogState; today: string }) {
   const [open, setOpen] = useState<Which | null>(null)
   const s = weekStrength(mondayOf(today), workouts, log.gym, today)
-  const which: Which | null = s.legs === today ? 'legs' : s.stabi.includes(today) ? 'stabi' : null
+  const which: Which | null = s.legs === today ? 'legs' : s.upper.includes(today) ? 'upper' : s.stabi.includes(today) ? 'stabi' : null
   if (!which) return null
-  const done = which === 'legs' ? s.legsDone === today : s.stabiDone.includes(today)
+  const done = which === 'legs' ? s.legsDone === today : which === 'upper' ? s.upperDone.includes(today) : s.stabiDone.includes(today)
   const legs = legSession(s.phase)
-  const title = which === 'legs' ? legs.title : 'Stabi für Läufer'
-  const minutes = which === 'legs' ? legs.minutes : stabiSession(readLevel()).minutes
+  const upper = upperSession(nextUpper(), s.phase)
+  const title = which === 'legs' ? legs.title : which === 'upper' ? upper.title : 'Stabi für Läufer'
+  const minutes = which === 'legs' ? legs.minutes : which === 'upper' ? upper.minutes : stabiSession(readLevel()).minutes
+  const doneLabel = which === 'legs' ? 'Beintraining' : which === 'upper' ? 'Oberkörper' : 'Stabi'
 
   return (
     <>
       <Card>
         <div className="flex items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ background: done ? 'var(--good)' : 'var(--series-4)' }} aria-hidden>
-            {done ? '✓' : which === 'legs' ? <DumbbellIcon /> : '◎'}
+            {done ? '✓' : which === 'stabi' ? '◎' : <DumbbellIcon />}
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-[15px] font-semibold">{done ? `${which === 'legs' ? 'Beintraining' : 'Stabi'} erledigt` : `Vorschlag: ${title}`}</div>
+            <div className="text-[15px] font-semibold">{done ? `${doneLabel} erledigt` : `Vorschlag: ${title}`}</div>
             <div className="text-xs text-ink-2">
-              {which === 'legs' ? 'Gym' : 'Zuhause, ohne Geräte'} · etwa {minutes} min
+              {which === 'stabi' ? 'Zuhause, ohne Geräte' : 'Gym'} · etwa {minutes} min
               {which === 'legs' && s.legsAfterKey && !done && ' · nach dem Lauf, mit Abstand'}
             </div>
           </div>
@@ -101,6 +103,7 @@ export function GymCard({ workouts, log, today }: { workouts: PlanWorkout[]; log
   const s = weekStrength(mondayOf(today), workouts, log.gym, today)
   const legs = legSession(s.phase)
   const upper = nextUpper()
+  const upperNext = s.upper.find((d) => d >= today && !s.upperDone.includes(d))
   const legsHint = s.legsDone ? 'diese Woche erledigt' : s.raceWeek ? 'Rennwoche, besser auslassen' : s.legs === today ? 'Vorschlag: heute' : s.legs ? `Vorschlag: ${wd(mondayOf(today), s.legs)}` : ''
   return (
     <>
@@ -116,7 +119,10 @@ export function GymCard({ workouts, log, today }: { workouts: PlanWorkout[]; log
           <button onClick={() => setOpen('upper')} className="press-row rounded-2xl bg-surface-2 p-3 text-left">
             <div className="text-[15px] font-semibold">Oberkörper</div>
             <div className="mt-0.5 text-xs text-ink-2">Muskelaufbau · {upperSession(upper, s.phase).minutes} min</div>
-            <div className="mt-1 text-[11px] text-ink-3">Heute dran: Variante {upper}</div>
+            <div className="mt-1 text-[11px] text-ink-3">
+              Variante {upper}
+              {upperNext ? ` · Vorschlag: ${upperNext === today ? 'heute' : wd(mondayOf(today), upperNext)}` : ''}
+            </div>
           </button>
         </div>
       </Card>
@@ -132,6 +138,7 @@ export function WeekStrengthLine({ monday, workouts, gym, today }: { monday: str
   const mark = (d: string, done: boolean) => `${wd(monday, d)}${done ? ' ✓' : ''}`
   const parts = [
     s.legs ? `Beine ${mark(s.legs, s.legsDone === s.legs)}` : s.raceWeek ? 'keine Beine (Rennwoche)' : null,
+    s.upper.length ? `Oberkörper ${s.upper.map((d) => mark(d, s.upperDone.includes(d))).join(', ')}` : null,
     s.stabi.length ? `Stabi ${s.stabi.map((d) => mark(d, s.stabiDone.includes(d))).join(', ')}` : null,
   ].filter(Boolean)
   if (!parts.length) return null
@@ -272,7 +279,7 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
             <p className="text-sm text-ink-2">{upper.focus}</p>
             <p className="mt-2 text-xs text-ink-3">Aufwärmen: {UPPER_WARMUP}</p>
             <p className="mt-2 text-xs text-ink-3">
-              Am besten 1–2 Mal pro Woche, A und B im Wechsel. Oberkörper wirkt sich nicht auf deine Readiness oder die nächsten Läufe aus und passt deshalb an jeden Tag, auch vor harten Einheiten.
+              Zweimal pro Woche, A und B im Wechsel, mit mindestens einem Tag Abstand. Die Tage schlägt dir der Plan vor, meist an Lauftagen: Oberkörper wirkt sich nicht auf deine Readiness oder die nächsten Läufe aus.
             </p>
           </Card>
           {upper.steps.map((x, i) => (

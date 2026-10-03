@@ -59,7 +59,7 @@ function Main() {
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
-  const plan = usePlan(data?.activities, day)
+  const plan = usePlan(data?.activities, day, data?.days)
   const log = useDailyLog()
 
   const refresh = useCallback(

@@ -1,7 +1,7 @@
 // Lädt Rennen und Plan, hakt Einheiten anhand der Garmin-Aktivitäten ab und bietet alle Aktionen.
 
 import { useCallback, useEffect, useState } from 'react'
-import type { Activity } from '../types'
+import type { Activity, DailyMetrics } from '../types'
 import { autoComplete, fillSteps, giveFeedback, skipWorkout } from './adapt'
 import { analyzeRun, merge, shiftPaces } from './analyze'
 import { catchUp, reentry } from './catchup'
@@ -10,6 +10,7 @@ import { toast } from '../toast'
 import { addDays, localToday } from './dates'
 import { fitnessFrom } from './fitness'
 import { generatePlan } from './generate'
+import { deload, longRunGuard, overloadCheck } from './overload'
 import { hasColumn, planStore } from './store'
 import type { Feedback, PlanWorkout, RaceEvent } from './types'
 
@@ -39,7 +40,18 @@ function friendly(e: unknown): string {
 }
 
 /** `day` ändert sich beim ersten Öffnen an einem neuen Tag, damit Verpasstes auch ohne neue Daten nachgezogen wird. */
-export function usePlan(activities: Activity[] | undefined, day = localToday()): PlanState {
+const OVERLOAD_KEY = 'overload.applied'
+// Feste leere Liste: ein neues [] bei jedem Aufruf würde den Plan endlos neu laden.
+const NO_METRICS: DailyMetrics[] = []
+function readApplied(): { date: string; level: number } | null {
+  try {
+    return JSON.parse(localStorage.getItem(OVERLOAD_KEY) ?? 'null')
+  } catch {
+    return null
+  }
+}
+
+export function usePlan(activities: Activity[] | undefined, day = localToday(), metrics: DailyMetrics[] = NO_METRICS): PlanState {
   const [events, setEvents] = useState<RaceEvent[]>([])
   const [workouts, setWorkouts] = useState<PlanWorkout[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,7 +100,26 @@ export function usePlan(activities: Activity[] | undefined, day = localToday()):
           current = current.map((x) => step.find((c) => c.id === x.id) ?? x)
         }
       }
-      const all = merge(done, filled, tidy, analyzed)
+      // Schutz vor Überlastung: zu große Sprünge beim langen Lauf kappen, bei Warnzeichen zurückschrauben.
+      let safety: PlanWorkout[] = []
+      if (activities) {
+        const guard = longRunGuard(current, activities, today)
+        current = current.map((w) => guard.changed.find((c) => c.id === w.id) ?? w)
+        const check = overloadCheck(metrics, activities, current, today)
+        const dl = deload(current, check, today, readApplied())
+        current = current.map((w) => dl.changed.find((c) => c.id === w.id) ?? w)
+        if (dl.changed.length) {
+          try {
+            localStorage.setItem(OVERLOAD_KEY, JSON.stringify({ date: today, level: check.level }))
+          } catch {
+            // ohne Speicher verhindert die Markierung im Titel die doppelte Anpassung
+          }
+        }
+        safety = merge(guard.changed, dl.changed)
+        const notes = [...guard.messages, ...dl.messages]
+        if (notes.length) toast(`Plan angepasst: ${notes.join(' ')}`)
+      }
+      const all = merge(done, filled, tidy, analyzed, safety)
       if (all.length) await planStore.updateWorkouts(all)
       const byId = new Map(current.map((w) => [w.id, w]))
       setEvents(ev)
@@ -99,7 +130,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday()):
     } finally {
       setLoading(false)
     }
-  }, [activities, day])
+  }, [activities, day, metrics])
 
   useEffect(() => {
     void reload()

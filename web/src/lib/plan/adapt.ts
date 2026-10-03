@@ -145,7 +145,7 @@ export interface ReadinessProposal {
   options: ReadinessOption[]
 }
 
-const snapshot = (w: PlanWorkout): NonNullable<PlanWorkout['original']> => ({
+export const snapshot = (w: PlanWorkout): NonNullable<PlanWorkout['original']> => ({
   kind: w.kind,
   title: w.title,
   description: w.description,
