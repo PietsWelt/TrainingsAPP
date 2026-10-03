@@ -604,3 +604,8 @@ export function mergeFocus(current: GymFocus | undefined, add: 'legs' | 'upper')
   if (!current || current === 'core' || current === add) return add
   return 'full'
 }
+
+/** Name einer Gym-Übung für den Verlauf. */
+export function exerciseName(id: string): string {
+  return [...LEG_EX, ...Object.values(UPPER_EX)].find((e) => e.id === id)?.name ?? id
+}
