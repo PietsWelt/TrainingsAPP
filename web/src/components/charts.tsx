@@ -65,7 +65,7 @@ export function WeeklyTimeChart({ data }: { data: { week: string; run: number; b
               name={s.label}
               stackId="t"
               fill={s.color}
-              stroke="var(--surface)"
+              stroke="var(--surface-solid)"
               strokeWidth={1}
               maxBarSize={22}
               radius={i === used.length - 1 ? [6, 6, 0, 0] : 0}
@@ -78,11 +78,12 @@ export function WeeklyTimeChart({ data }: { data: { week: string; run: number; b
   )
 }
 
+// Schlafphasen als eine Farbe in Stufen: je tiefer der Schlaf, desto kräftiger.
 const SLEEP_SERIES = [
-  { key: 'deep', label: 'Tief', color: 'var(--series-1)' },
-  { key: 'light', label: 'Leicht', color: 'var(--series-2)' },
-  { key: 'rem', label: 'REM', color: 'var(--series-3)' },
-  { key: 'awake', label: 'Wach', color: 'var(--series-4)' },
+  { key: 'deep', label: 'Tief', color: 'var(--c-schlaf)' },
+  { key: 'light', label: 'Leicht', color: 'color-mix(in oklab, var(--c-schlaf) 45%, var(--surface-solid))' },
+  { key: 'rem', label: 'REM', color: 'color-mix(in oklab, var(--c-schlaf) 72%, var(--surface-solid))' },
+  { key: 'awake', label: 'Wach', color: 'var(--band)' },
 ] as const
 
 export function SleepChart({ data }: { data: { date: string; deep: number; light: number; rem: number; awake: number }[] }) {
@@ -102,7 +103,7 @@ export function SleepChart({ data }: { data: { date: string; deep: number; light
               name={s.label}
               stackId="s"
               fill={s.color}
-              stroke="var(--surface)"
+              stroke="var(--surface-solid)"
               strokeWidth={data.length > 40 ? 0 : 1}
               radius={i === SLEEP_SERIES.length - 1 ? [3, 3, 0, 0] : 0}
             />
@@ -125,7 +126,7 @@ export function HrvChart({ data }: { data: { date: string; hrv: number | null; b
           <YAxis {...axis} width={44} domain={[(m: number) => Math.floor((m - 3) / 5) * 5, (m: number) => Math.ceil((m + 3) / 5) * 5]} allowDecimals={false} />
           <Tooltip cursor={lineCursor} content={<ChartTooltip labelFormat={longDate} valueFormat={(v) => `${v} ms`} />} />
           <Area isAnimationActive={false} dataKey="band" name="Normalbereich" fill="var(--band)" stroke="none" fillOpacity={0.8} />
-          <Line isAnimationActive={false} dataKey="hrv" name="HRV" stroke="var(--series-1)" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2 }} connectNulls />
+          <Line isAnimationActive={false} dataKey="hrv" name="HRV" stroke="var(--series-1)" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'var(--surface-solid)', strokeWidth: 2 }} connectNulls />
         </ComposedChart>
       </ResponsiveContainer>
       <Legend items={[{ label: 'HRV (Nacht)', color: 'var(--series-1)' }, { label: 'Normalbereich', color: 'var(--band)' }]} />
@@ -163,7 +164,7 @@ export function SimpleLineChart({ data, unit, name, height = 160, color = 'var(-
           strokeWidth={2}
           fill={`url(#${id})`}
           dot={false}
-          activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2 }}
+          activeDot={{ r: 4, stroke: 'var(--surface-solid)', strokeWidth: 2 }}
           connectNulls
         />
       </AreaChart>
@@ -181,11 +182,11 @@ export function IntensityChart({ data }: { data: { week: string; easy: number; h
           <XAxis dataKey="week" tickFormatter={shortDate} {...axis} minTickGap={16} />
           <YAxis {...axis} width={44} tickFormatter={(v) => `${v}h`} />
           <Tooltip cursor={cursor} content={<ChartTooltip labelFormat={weekLabel} valueFormat={(v) => hoursMin(v * 3600)} />} />
-          <Bar isAnimationActive={false} dataKey="easy" name="Locker (Z1–3)" stackId="i" fill="var(--zone-2)" stroke="var(--surface)" strokeWidth={1} maxBarSize={22} />
-          <Bar isAnimationActive={false} dataKey="hard" name="Hart (Z4–5)" stackId="i" fill="var(--zone-5)" stroke="var(--surface)" strokeWidth={1} maxBarSize={22} radius={[6, 6, 0, 0]} />
+          <Bar isAnimationActive={false} dataKey="easy" name="Locker (Z1–3)" stackId="i" fill="var(--c-lock)" stroke="var(--surface-solid)" strokeWidth={1} maxBarSize={22} />
+          <Bar isAnimationActive={false} dataKey="hard" name="Hart (Z4–5)" stackId="i" fill="var(--c-hart)" stroke="var(--surface-solid)" strokeWidth={1} maxBarSize={22} radius={[6, 6, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
-      <Legend items={[{ label: 'Locker (Zone 1–3)', color: 'var(--zone-2)' }, { label: 'Hart (Zone 4–5)', color: 'var(--zone-5)' }]} />
+      <Legend items={[{ label: 'Locker (Zone 1–3)', color: 'var(--c-lock)' }, { label: 'Hart (Zone 4–5)', color: 'var(--c-hart)' }]} />
     </>
   )
 }

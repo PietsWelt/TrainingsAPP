@@ -20,8 +20,8 @@ export function Activities({ activities, onOpen }: { activities: Activity[]; onO
   }
 
   return (
-    <div className="page-in space-y-3">
-      <div>
+    <div className="page-in desk-cols space-y-3">
+      <div className="span-all">
         <Segmented
           value={filter}
           onChange={setFilter}

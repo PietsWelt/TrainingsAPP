@@ -18,8 +18,10 @@ export function Sheet({ title, onClose, children, footer }: { title?: string; on
 
   // Portal: Eltern mit transform (z.B. die Einblend-Animation) würden „fixed“ sonst einsperren.
   return createPortal(
+    <>
+    <div className="fade-in fixed inset-0 z-30 hidden bg-[rgb(10_8_30/0.35)] lg:block" onClick={onClose} aria-hidden />
     <div
-      className="sheet-in fixed inset-0 z-30 flex flex-col bg-bg"
+      className="sheet-in sheet-panel fixed inset-0 z-30 flex flex-col bg-bg"
       style={dx ? { transform: `translateX(${dx}px)`, transition: 'none' } : undefined}
       onTouchStart={(e) => {
         const t = e.touches[0]
@@ -42,7 +44,7 @@ export function Sheet({ title, onClose, children, footer }: { title?: string; on
         setDx(0)
       }}
     >
-      <header className="flex items-center border-b border-line bg-surface px-1 pb-1" style={{ paddingTop: 'max(env(safe-area-inset-top), 6px)' }}>
+      <header className="glass flex items-center border-b border-line px-1 pb-1" style={{ paddingTop: 'max(env(safe-area-inset-top), 6px)' }}>
         <button onClick={onClose} className="flex min-h-11 items-center gap-1 rounded-lg px-3 text-[17px] text-accent">
           <svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M10 2 2 10l8 8" />
@@ -55,11 +57,12 @@ export function Sheet({ title, onClose, children, footer }: { title?: string; on
         <div className="mx-auto w-full max-w-xl space-y-3 p-4 pb-8">{children}</div>
       </div>
       {footer && (
-        <div className="border-t border-line bg-surface/95 px-4 pt-3 backdrop-blur" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
+        <div className="glass border-t border-line px-4 pt-3" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 12px)' }}>
           <div className="mx-auto max-w-xl space-y-2">{footer}</div>
         </div>
       )}
-    </div>,
+    </div>
+    </>,
     document.body,
   )
 }

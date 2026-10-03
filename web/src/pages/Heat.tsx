@@ -56,7 +56,7 @@ export function HeatCard({ workout }: { workout: PlanWorkout | undefined }) {
       <Card title="Wetter für deinen Lauf" subtitle="Hitze und Schwüle machen gleiche Anstrengung langsamer">
         <p className="text-sm text-ink-2">Soll die App das Wetter an deinem aktuellen Standort prüfen? Sonst nimmt sie den Startort deines letzten Laufs.</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button onClick={() => pick('yes')} className="min-h-11 rounded-xl bg-accent text-[15px] font-semibold text-white">Standort nutzen</button>
+          <button onClick={() => pick('yes')} className="min-h-11 rounded-xl btn-primary text-[15px] font-semibold">Standort nutzen</button>
           <button onClick={() => pick('no')} className="min-h-11 rounded-xl bg-surface-2 text-[15px] font-semibold">Ohne Standort</button>
         </div>
       </Card>

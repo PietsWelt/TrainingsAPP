@@ -1,57 +1,94 @@
 @import "tailwindcss";
 
-/* Farben als Rollen; Serienfarben aus einer CVD-geprüften Palette (hell/dunkel getrennt gewählt). */
+/* Designsystem „Kadenz“: hell = Holo Glass (Perlmutt, Milchglas, Schimmerrand), dunkel = Neon Aurora (Nachthimmel, Polarlicht).
+   Datenfarben (Erholung, Locker, Hart, Schlaf) sind mit dem dataviz-Prüfskript getestet: OKLCH-Band, Farbschwäche (alle Paare), Kontrast. */
 :root {
   color-scheme: light;
-  --bg: #f3f3f1;
-  --surface: #ffffff;
-  --surface-2: #f0f0ed;
-  --border: #e6e5e1;
-  --shadow: 0 1px 2px rgb(20 20 15 / 0.04), 0 6px 20px -8px rgb(20 20 15 / 0.08);
-  --card-border: transparent;
-  --text: #0b0b0b;
-  --text-2: #52514e;
-  --text-3: #8a8984;
-  --accent: #2a78d6;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --band: #e4e3df;
-  --good: #0ca30c;
-  --warning: #fab219;
-  --serious: #ec835a;
-  --critical: #d03b3b;
+  --bg: #f4f2fb;
+  --surface: rgb(255 255 255 / 0.74);
+  --surface-solid: #ffffff;
+  --surface-2: #ebe8f5;
+  --border: rgb(22 20 42 / 0.09);
+  --shadow: 0 10px 30px -18px rgb(40 30 110 / 0.38);
+  --card-border: rgb(255 255 255 / 0.95);
+  --glass: rgb(255 255 255 / 0.66);
+  --text: #16142a;
+  --text-2: #4f4c6a;
+  --text-3: #7e7b98;
+  --accent: #5b45d6;
+  --c-erh: #007faa;
+  --c-lock: #00a071;
+  --c-hart: #ad0063;
+  --c-schlaf: #5e2dad;
+  --series-1: var(--c-erh);
+  --series-2: var(--c-hart);
+  --series-3: var(--c-lock);
+  --series-4: var(--c-schlaf);
+  --band: #e2def0;
+  --good: #1b7f45;
+  --warning: #a35f00;
+  --serious: #c2410c;
+  --critical: #c0262d;
   /* Pulszonen als Ampel: hellgrün, grün, gelb, orange, rot. */
   --zone-1: #8fd19e;
-  --zone-2: #1f9d55;
-  --zone-3: #f2b705;
-  --zone-4: #f0712c;
-  --zone-5: #d7263d;
+  --zone-2: #2e9d55;
+  --zone-3: #e8b400;
+  --zone-4: #f07a1a;
+  --zone-5: #d6282e;
+  /* Markenverlauf: nur Logo, Hauptknopf, aktive Symbole, Schimmerrand. Nie in Grafiken. */
+  --g1: #5ac8fa;
+  --g2: #8b7bff;
+  --g3: #ff7ac6;
+  --brand: linear-gradient(120deg, var(--g1), var(--g2) 55%, var(--g3));
+  --hero-border: conic-gradient(from 200deg, #7fd6ff, #b9a4ff, #ff9ad5, #ffe08a, #8ff0d0, #7fd6ff);
+  --hero-glow: 0 10px 30px -18px rgb(40 30 110 / 0.38);
+  --btn: #16142a;
+  --btn-text: #ffffff;
+  --blob-1: rgb(122 108 240 / 0.24);
+  --blob-2: rgb(0 160 140 / 0.14);
+  --blob-3: rgb(255 122 198 / 0.15);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spring: linear(0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --bg: #0c0c0b;
-    --surface: #171716;
-    --surface-2: #222220;
-    --border: #2b2b28;
+    --bg: #0c0a1f;
+    --surface: rgb(255 255 255 / 0.055);
+    --surface-solid: #17142f;
+    --surface-2: rgb(255 255 255 / 0.08);
+    --border: rgb(190 180 255 / 0.12);
     --shadow: none;
-    --card-border: #232321;
-    --text: #ffffff;
-    --text-2: #c3c2b7;
-    --text-3: #8a8984;
-    --accent: #3987e5;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
-    --band: #383835;
-    --zone-1: #6fbf80;
-    --zone-2: #26b062;
-    --zone-3: #f5c518;
-    --zone-4: #f5813d;
-    --zone-5: #ef4354;
+    --card-border: rgb(190 180 255 / 0.14);
+    --glass: rgb(16 13 40 / 0.72);
+    --text: #f1efff;
+    --text-2: #c4c0e4;
+    --text-3: #8d89b4;
+    --accent: #22d3ee;
+    --c-erh: #00a3c9;
+    --c-lock: #24ae56;
+    --c-hart: #d00078;
+    --c-schlaf: #7847d0;
+    --band: #2a2650;
+    --good: #3ccf74;
+    --warning: #f5a524;
+    --serious: #ff8a4c;
+    --critical: #ff5a64;
+    --zone-1: #7fd894;
+    --zone-2: #33b85a;
+    --zone-3: #f2c230;
+    --zone-4: #ff8a2a;
+    --zone-5: #ff4b55;
+    --g1: #22d3ee;
+    --g2: #7d5ee0;
+    --g3: #ff3fb0;
+    --hero-border: linear-gradient(135deg, rgb(34 211 238 / 0.7), rgb(125 94 224 / 0.55), rgb(255 63 176 / 0.7));
+    --hero-glow: 0 0 44px -14px rgb(0 190 230 / 0.35);
+    --btn: linear-gradient(90deg, #22d3ee, #a855f7);
+    --btn-text: #0c0a1f;
+    --blob-1: rgb(0 190 230 / 0.26);
+    --blob-2: rgb(125 94 224 / 0.30);
+    --blob-3: rgb(229 37 154 / 0.24);
   }
 }
 
@@ -64,7 +101,9 @@
   --color-ink-2: var(--text-2);
   --color-ink-3: var(--text-3);
   --color-accent: var(--accent);
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-surface-solid: var(--surface-solid);
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Unbounded Variable", "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
 html, body {
@@ -72,18 +111,43 @@ html, body {
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
 }
+/* Stehendes Licht im Hintergrund: Polarlicht (dunkel) bzw. Perlmutt-Schimmer (hell). Keine Animation, kostet nichts beim Scrollen. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(45vmax 32vmax at 88% -4%, var(--blob-1), transparent 70%),
+    radial-gradient(40vmax 30vmax at -6% 38%, var(--blob-2), transparent 70%),
+    radial-gradient(45vmax 30vmax at 70% 104%, var(--blob-3), transparent 70%);
+}
+#root { isolation: isolate; }
+h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+.text-gradient { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
 body {
   font-feature-settings: "tnum" 1, "cv11" 1;
   overscroll-behavior: none;
 }
 .recharts-wrapper *:focus { outline: none; }
 
-/* Karten: hell mit weichem Schatten, dunkel mit feiner Kante. */
+/* Karten: Milchglas. Bewusst ohne backdrop-filter, das kostet auf älteren Handys beim Scrollen zu viel. */
 .card { background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow); border-radius: 22px; }
+/* Eine besondere Karte pro Seite: Schimmerrand (hell) bzw. Polarlicht-Rand (dunkel). */
+.card-hero { border: 1.5px solid transparent; background: linear-gradient(var(--surface-solid), var(--surface-solid)) padding-box, var(--hero-border) border-box; box-shadow: var(--hero-glow); }
+/* Schwebende Ebene (Tab-Leiste, Kopf, Seitenleiste): nur hier echte Unschärfe. */
+.glass { background: var(--glass); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); }
+@media (max-width: 1023px) { .glass-mobile { background: var(--glass); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); } }
+.btn-primary { background: var(--btn); color: var(--btn-text); }
 .accent-soft { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
-@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes slide-l { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes slide-r { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+.tab-from-right { animation: slide-l 300ms var(--ease-out) both; }
+.tab-from-left { animation: slide-r 300ms var(--ease-out) both; }
 .page-in > * { animation: fade-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .page-in > *:nth-child(2) { animation-delay: 30ms; }
 .page-in > *:nth-child(3) { animation-delay: 60ms; }
@@ -100,12 +164,33 @@ button.press-row:not(:disabled):active { transform: none; opacity: 1; background
 input, select, textarea { font-size: 16px; } /* verhindert Auto-Zoom auf iOS */
 
 @keyframes sheet-in { from { transform: translateX(100%); } to { transform: none; } }
-@keyframes toast-in { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes toast-in { from { transform: translateY(16px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in 200ms ease-out both; }
 @keyframes shimmer { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 .sheet-in { animation: sheet-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-.toast-in { animation: toast-in 200ms ease-out; }
+.toast-in { animation: toast-in 380ms var(--spring) both; }
 .skeleton { background: var(--surface-2); animation: shimmer 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .sheet-in, .toast-in, .skeleton, .page-in > * { animation: none; }
+  .sheet-in, .toast-in, .skeleton, .page-in > *, .tab-from-right, .tab-from-left, .fade-in { animation: none; }
   button:not(:disabled):active { transform: none; }
+}
+
+/* PC: Inhalte in zwei Spalten, Karten brechen nicht um. */
+@media (min-width: 1024px) {
+  .desk-cols { columns: 2; column-gap: 16px; }
+  .desk-cols > * { break-inside: avoid; margin: 0 0 14px !important; }
+  .desk-cols > .span-all { column-span: all; }
+}
+
+/* Ring zeichnet sich einmal beim Öffnen ein. */
+@keyframes ring-draw { from { stroke-dasharray: 0 9999; } }
+.ring-arc { animation: ring-draw 1s var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) { .ring-arc { animation: none; } }
+
+.toast-stack { bottom: calc(env(safe-area-inset-bottom) + 92px); }
+@media (min-width: 1024px) {
+  .toast-stack { bottom: 24px; }
+  /* Blätter am PC als Panel rechts, die App bleibt daneben sichtbar. */
+  .sheet-panel { left: auto !important; width: 560px; border-left: 1px solid var(--border); box-shadow: -30px 0 80px -40px rgb(20 10 60 / 0.5); }
 }

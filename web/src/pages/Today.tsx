@@ -42,10 +42,10 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
 
   const sleepParts = lastNight
     ? [
-        { label: 'Tief', s: lastNight.deep_sleep_s ?? 0, color: 'var(--series-1)' },
-        { label: 'Leicht', s: lastNight.light_sleep_s ?? 0, color: 'var(--series-2)' },
-        { label: 'REM', s: lastNight.rem_sleep_s ?? 0, color: 'var(--series-3)' },
-        { label: 'Wach', s: lastNight.awake_s ?? 0, color: 'var(--series-4)' },
+        { label: 'Tief', s: lastNight.deep_sleep_s ?? 0, color: 'var(--c-schlaf)' },
+        { label: 'Leicht', s: lastNight.light_sleep_s ?? 0, color: 'color-mix(in oklab, var(--c-schlaf) 45%, var(--surface-solid))' },
+        { label: 'REM', s: lastNight.rem_sleep_s ?? 0, color: 'color-mix(in oklab, var(--c-schlaf) 72%, var(--surface-solid))' },
+        { label: 'Wach', s: lastNight.awake_s ?? 0, color: 'var(--band)' },
       ]
     : []
   const sleepTotal = sleepParts.reduce((a, b) => a + b.s, 0)
@@ -54,7 +54,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
   const spark = (k: keyof (typeof recent)[number]) => recent.map((d) => d[k] as number | null)
 
   return (
-    <div className="page-in space-y-3">
+    <div className="page-in desk-cols space-y-3">
       {own && <ReadinessCard r={own} garmin={readiness} />}
       <ProposalCard plan={plan} r={own} today={today} log={log} />
       <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
@@ -86,7 +86,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
             label="Schlaf"
             value={lastNight ? hoursMin(lastNight.sleep_s) : '–'}
             spark={recent.map((d) => (d.sleep_s != null ? d.sleep_s / 3600 : null))}
-            color="var(--series-3)"
+            color="var(--c-schlaf)"
             hint={lastNight?.sleep_score != null ? `Score ${lastNight.sleep_score}` : undefined}
           />
           <Stat
@@ -101,14 +101,14 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
             value={day?.resting_hr ?? '–'}
             unit="bpm"
             spark={spark('resting_hr')}
-            color="var(--series-2)"
+            color="var(--c-erh)"
             hint={rhrDelta != null && `${rhrDelta > 0 ? '+' : ''}${rhrDelta} ggü. 7-Tage-Schnitt`}
           />
           <Stat
             label="Body Battery"
             value={day?.body_battery_high ?? '–'}
             spark={spark('body_battery_high')}
-            color="var(--series-4)"
+            color="var(--c-erh)"
             hint={day?.body_battery_low != null ? `Tiefstwert ${day.body_battery_low}` : undefined}
           />
         </div>
