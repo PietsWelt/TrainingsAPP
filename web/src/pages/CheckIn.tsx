@@ -240,14 +240,14 @@ function CheckInSheet({
                   role="radio"
                   aria-checked={d.gym?.hard === hard}
                   onClick={() => set({ gym: { ...d.gym!, hard } })}
-                  className={`min-h-10 rounded-xl text-sm font-medium ${d.gym?.hard === hard ? 'bg-ink text-surface' : 'bg-surface-2 text-ink-2'}`}
+                  className={`min-h-10 rounded-xl text-sm font-medium ${d.gym?.hard === hard ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}
                 >
                   {hard ? 'Hart' : 'Locker'}
                 </button>
               ))}
             </div>
           )}
-          {(d.gym?.focus === 'legs' || d.gym?.focus === 'upper') && (
+          {day === 'today' && (d.gym?.focus === 'legs' || d.gym?.focus === 'upper') && (
             <button
               onClick={() => setPlanFor(d.gym!.focus as 'legs' | 'upper')}
               className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl bg-surface-2 px-3.5 text-sm font-semibold text-accent"

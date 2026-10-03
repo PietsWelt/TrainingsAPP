@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { SkeletonPage } from './components/Skeleton'
+import { ThemeToggle } from './components/ThemeToggle'
 import { Toaster } from './components/Toast'
 import { toast } from './lib/toast'
 import { tap } from './lib/haptics'
@@ -171,6 +172,7 @@ function Main() {
           ))}
         </nav>
         <div className="mt-auto space-y-3 px-2">
+          <ThemeToggle wide />
           <button onClick={syncNow} disabled={syncing} className="card relative flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-ink-2 disabled:opacity-70">
             <SyncIcon spinning={syncing} />
             {syncing ? 'Sync läuft …' : 'Jetzt synchronisieren'}
@@ -190,10 +192,13 @@ function Main() {
               </p>
               <h1 className="text-[28px] leading-tight font-semibold lg:text-[34px]">{TITLES[tab]}</h1>
             </div>
-            <button onClick={syncNow} disabled={syncing} aria-label="Mit Garmin synchronisieren" className="card relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-2 disabled:opacity-70 lg:hidden">
-              <SyncIcon spinning={syncing} />
-              <SyncDot data={data} />
-            </button>
+            <div className="flex shrink-0 gap-2 lg:hidden">
+              <ThemeToggle />
+              <button onClick={syncNow} disabled={syncing} aria-label="Mit Garmin synchronisieren" className="card relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-2 disabled:opacity-70">
+                <SyncIcon spinning={syncing} />
+                <SyncDot data={data} />
+              </button>
+            </div>
           </div>
           {tab === 'today' && <p className="mt-0.5 text-xs text-ink-3 lg:hidden"><SyncStatus data={data} /></p>}
         </header>
