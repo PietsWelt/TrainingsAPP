@@ -1,7 +1,7 @@
 name: Garmin Sync
 
 on:
-  # Der 30-Minuten-Takt kommt aus Supabase (pg_cron, Migration 0006_sync_cron.sql):
+  # Der Stunden-Takt kommt aus Supabase (pg_cron, Migration 0015_sync_stuendlich.sql):
   # GitHubs eigener Zeitplan lief bei diesem Repo nicht zuverlässig.
   workflow_dispatch:
     inputs:

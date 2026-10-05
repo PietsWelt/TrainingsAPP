@@ -22,6 +22,7 @@ async function rpc(fn: string, auth: string, args: Record<string, unknown> = {})
     headers: { apikey: key, Authorization: auth, "Content-Type": "application/json" },
     body: JSON.stringify(args),
   });
+  if (!res.ok) console.error("RPC", fn, res.status, await res.text());
   return res.ok && (await res.json()) === true;
 }
 

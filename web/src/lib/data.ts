@@ -121,7 +121,7 @@ export async function triggerSync(): Promise<void> {
     const missing = error.name === 'FunctionsFetchError' || error.name === 'FunctionsRelayError' || status === 404
     throw new Error(
       missing
-        ? 'Der Sync-Knopf ist noch nicht eingerichtet (README, Schritt 4). Der automatische Sync alle 30 Minuten läuft trotzdem.'
+        ? 'Der Sync-Knopf ist noch nicht eingerichtet (README, Schritt 4). Der automatische Sync jede Stunde läuft trotzdem.'
         : `Sync konnte nicht gestartet werden: ${await errorDetail(error)}`,
     )
   }
