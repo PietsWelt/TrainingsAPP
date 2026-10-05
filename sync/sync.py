@@ -1,6 +1,6 @@
 """Holt neue Daten von Garmin Connect und schreibt sie nach Supabase.
 
-Läuft per GitHub Actions (alle 30 Minuten und auf Knopfdruck aus der App).
+Läuft per GitHub Actions (jede Stunde und auf Knopfdruck aus der App).
 Erster Lauf: lädt BACKFILL_DAYS Tage Historie. Danach nur die letzten Tage,
 weil Garmin Schlaf/HRV teils nachträglich aktualisiert.
 """
