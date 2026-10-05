@@ -52,7 +52,8 @@ Danach den Codespace löschen. Anschließend unter **Actions → Garmin Sync →
 1. GitHub: **Settings → Developer settings → Fine-grained tokens**, Zugriff nur auf dieses Repo, Berechtigung **Actions: Read and write**.
 2. Supabase: **Edge Functions → Deploy a new function → via Editor**, Name `trigger-sync`, Inhalt aus `supabase/functions/trigger-sync/index.ts`.
 3. Supabase: **Edge Functions → Secrets**: `GITHUB_TOKEN` (Token von oben), `GITHUB_REPO` = `PietsWelt/TrainingsAPP`. Läuft die App nicht unter `https://pietswelt.github.io`, zusätzlich `ALLOWED_ORIGIN` mit der eigenen Adresse.
-4. Die Funktion startet den Sync nur für dich (eingeloggt) oder für den Zeitplan aus `0010_sicherheit.sql`. Deshalb `0010` vor der Funktion ausführen.
+4. Die Funktion startet den Sync nur für dich (eingeloggt) oder für den Zeitplan aus `0015_sync_stuendlich.sql`. Deshalb `0010` und `0015` vor der Funktion ausführen.
+5. Für den Zeitplan im SQL Editor `select decrypted_secret from vault.decrypted_secrets where name = 'sync_cron_secret';` ausführen und den Wert unter **Edge Functions → Secrets** als `CRON_SECRET` speichern. Danach die Funktion einmal neu deployen.
 
 ### Workouts auf der Uhr
 Der Sync legt die geplanten Lauf- und Radeinheiten der nächsten 7 Tage als Workouts in Garmin Connect an

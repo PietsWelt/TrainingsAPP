@@ -1,5 +1,7 @@
 -- Automatischer Sync: einmal pro Stunde statt alle 30 Minuten, mit dem Geheimnis aus 0010.
 -- Einfach komplett im SQL-Editor ausführen, es gibt keine Platzhalter.
+-- Danach den Wert von sync_cron_secret als Function-Secret CRON_SECRET speichern und trigger-sync
+-- neu deployen (README, Schritt 4.5). Sonst weist die Function den Zeitplan ab (403 "Nicht erlaubt").
 
 -- Geheimnis anlegen, falls 0010 das nicht geschafft hat.
 select vault.create_secret(encode(extensions.gen_random_bytes(24), 'hex'), 'sync_cron_secret')
