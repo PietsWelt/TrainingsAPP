@@ -90,6 +90,16 @@ def sync_days(client: Garmin, db: Supabase, days: list[date]) -> int:
             r = rows[-1]
             have = [k for k in ("sleep_s", "hrv_last_night", "resting_hr", "training_readiness") if r[k] is not None]
             log.info("Tag %s: %s", ds, ", ".join(have) or "keine Werte")
+            raw = r["raw"]
+            dto = (raw["sleep"] or {}).get("dailySleepDTO") if isinstance(raw["sleep"], dict) else None
+            rd = raw["readiness"]
+            log.info(
+                "  Rohdaten: Schlaf=%s DTO-Felder=%s Readiness=%s %s",
+                type(raw["sleep"]).__name__,
+                sorted(k for k, v in (dto or {}).items() if v is not None)[:40],
+                type(rd).__name__,
+                sorted((rd[0] if isinstance(rd, list) and rd else rd or {}).keys())[:30] if isinstance(rd, (list, dict)) else "",
+            )
         # In Paketen schreiben, damit ein Abbruch beim Backfill nicht alles verliert.
         if len(rows) >= 14:
             db.upsert("daily_metrics", rows, "date")
