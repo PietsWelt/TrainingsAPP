@@ -85,6 +85,11 @@ def sync_days(client: Garmin, db: Supabase, days: list[date]) -> int:
                 max_metrics=safe(lambda: client.get_max_metrics(ds), f"VO2max {ds}"),
             )
         )
+        # Nur ob Werte da sind, keine Zahlen: die Actions-Logs sind öffentlich.
+        if len(days) <= 7:
+            r = rows[-1]
+            have = [k for k in ("sleep_s", "hrv_last_night", "resting_hr", "training_readiness") if r[k] is not None]
+            log.info("Tag %s: %s", ds, ", ".join(have) or "keine Werte")
         # In Paketen schreiben, damit ein Abbruch beim Backfill nicht alles verliert.
         if len(rows) >= 14:
             db.upsert("daily_metrics", rows, "date")
