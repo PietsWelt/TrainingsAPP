@@ -8,6 +8,7 @@ import { usePullToRefresh } from './lib/usePullToRefresh'
 import { useSwipeTabs } from './lib/useSwipeTabs'
 import { useDailyLog } from './lib/useDailyLog'
 import type { Session } from '@supabase/supabase-js'
+import { appState, MIGRATION_HINT } from './lib/appState'
 import { clearCache, readCache, sameData, writeCache } from './lib/cache'
 import { latestRun, loadDataset, syncAndWait } from './lib/data'
 import { dateLabel, relativeTime } from './lib/format'
@@ -56,6 +57,7 @@ function Main() {
   const [data, setData] = useState<Dataset | null>(readCache)
   const [day, setDay] = useState(localToday)
   const loadedAt = useRef(0)
+  const hinted = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
@@ -71,6 +73,11 @@ function Main() {
         setData((prev) => (sameData(prev, d) ? prev : d))
         writeCache(d)
         setError(null)
+        // Tabelle app_state fehlt: einmal pro Sitzung sagen, welche SQL-Datei fehlt.
+        if (appState.missing && !hinted.current) {
+          hinted.current = true
+          toast(MIGRATION_HINT)
+        }
       })
       .catch((e: Error) => setError(e.message)),
     [],

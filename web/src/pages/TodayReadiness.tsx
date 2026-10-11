@@ -4,6 +4,7 @@ import { tap } from '../lib/haptics'
 import { legsProposal, readinessProposal } from '../lib/plan/adapt'
 import type { PlanState } from '../lib/plan/usePlan'
 import { legFatigue, type Readiness } from '../lib/readiness'
+import { setState, useAppState } from '../lib/appState'
 import { toast } from '../lib/toast'
 import type { DailyLogState } from '../lib/useDailyLog'
 
@@ -55,16 +56,8 @@ export function ReadinessCard({ r, garmin }: { r: Readiness; garmin: number | nu
 
 const barColor = (s: number) => (s >= 70 ? 'var(--good)' : s >= 50 ? 'var(--warning)' : s >= 35 ? 'var(--serious)' : 'var(--critical)')
 
-const DISMISS_KEY = 'readiness.dismissed'
-
 export function ProposalCard({ plan, r, today, log }: { plan: PlanState; r: Readiness | null; today: string; log: DailyLogState }) {
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return localStorage.getItem(DISMISS_KEY) === today
-    } catch {
-      return false
-    }
-  })
+  const dismissed = useAppState<string | null>('readiness.dismissed', null) === today
   const [busy, setBusy] = useState(false)
   const p = readinessProposal(plan.workouts, today, r) ?? legsProposal(plan.workouts, today, legFatigue(today, log.gym))
   if (!p || dismissed) return null
@@ -99,12 +92,7 @@ export function ProposalCard({ plan, r, today, log }: { plan: PlanState; r: Read
         <button
           disabled={busy}
           onClick={() => {
-            try {
-              localStorage.setItem(DISMISS_KEY, today)
-            } catch {
-              // egal, dann nur bis zum Neuladen
-            }
-            setDismissed(true)
+            void setState('readiness.dismissed', today)
           }}
           className="min-h-11 rounded-xl text-[15px] font-medium text-ink-2"
         >

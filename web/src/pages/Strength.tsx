@@ -26,23 +26,17 @@ import {
   type WeekStrength,
 } from '../lib/strength'
 import { cachedGymSets, fmtSets, lastSets, loadGymSets, parseNum, progression, repRange, saveGymSession, type GymSession, type GymSet } from '../lib/gymSets'
+import { getState, setState, useAppState } from '../lib/appState'
 import { toast } from '../lib/toast'
 import type { DailyLogState } from '../lib/useDailyLog'
 
-const LEVEL_KEY = 'stabi.level'
 const WEEKDAY = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 const wd = (monday: string, d: string) => WEEKDAY[Math.round((Date.parse(d) - Date.parse(monday)) / 86400_000)]
 
-function readLevel(): StabiLevel {
-  try {
-    return (localStorage.getItem(LEVEL_KEY) as StabiLevel | null) ?? 'easy'
-  } catch {
-    return 'easy'
-  }
-}
+// Stufe und letzte Oberkörper-Variante gelten auf allen Geräten (app_state).
+const readLevel = (): StabiLevel => getState<StabiLevel>('stabi.level', 'easy')
 
 export type Which = 'legs' | 'stabi' | 'upper'
-const UPPER_KEY = 'gym.upper.last'
 
 function readStore<T>(key: string, fallback: T): T {
   try {
@@ -60,19 +54,21 @@ function writeStore(key: string, value: unknown) {
   }
 }
 /** Vorschlag: die Variante, die zuletzt nicht dran war. */
-const nextUpper = (): UpperVariant => (readStore<UpperVariant>(UPPER_KEY, 'B') === 'A' ? 'B' : 'A')
+const nextUpper = (): UpperVariant => (getState<UpperVariant>('gym.upper.last', 'B') === 'A' ? 'B' : 'A')
 
 /** Auf „Heute“: der Kraft- oder Stabi-Vorschlag für heute, falls einer ansteht. */
 export function StrengthCard({ workouts, log, today }: { workouts: PlanWorkout[]; log: DailyLogState; today: string }) {
   const [open, setOpen] = useState<Which | null>(null)
+  const level = useAppState<StabiLevel>('stabi.level', 'easy')
+  const upperNext = useAppState<UpperVariant>('gym.upper.last', 'B') === 'A' ? 'B' : 'A'
   const s = weekStrength(mondayOf(today), workouts, log.gym, today)
   const which: Which | null = s.legs === today ? 'legs' : s.upper.includes(today) ? 'upper' : s.stabi.includes(today) ? 'stabi' : null
   if (!which) return null
   const done = which === 'legs' ? s.legsDone === today : which === 'upper' ? s.upperDone.includes(today) : s.stabiDone.includes(today)
   const legs = legSession(s.phase)
-  const upper = upperSession(nextUpper(), s.phase)
+  const upper = upperSession(upperNext, s.phase)
   const title = which === 'legs' ? legs.title : which === 'upper' ? upper.title : 'Stabi für Läufer'
-  const minutes = which === 'legs' ? legs.minutes : which === 'upper' ? upper.minutes : stabiSession(readLevel()).minutes
+  const minutes = which === 'legs' ? legs.minutes : which === 'upper' ? upper.minutes : stabiSession(level).minutes
   const doneLabel = which === 'legs' ? 'Beintraining' : which === 'upper' ? 'Oberkörper' : 'Stabi'
 
   return (
@@ -105,7 +101,7 @@ export function GymCard({ workouts, log, today }: { workouts: PlanWorkout[]; log
   const [history, setHistory] = useState(false)
   const s = weekStrength(mondayOf(today), workouts, log.gym, today)
   const legs = legSession(s.phase)
-  const upper = nextUpper()
+  const upper = useAppState<UpperVariant>('gym.upper.last', 'B') === 'A' ? 'B' : 'A'
   const upperNext = s.upper.find((d) => d >= today && !s.upperDone.includes(d))
   const legsHint = s.legsDone ? 'diese Woche erledigt' : s.raceWeek ? 'Rennwoche, besser auslassen' : s.legs === today ? 'Vorschlag: heute' : s.legs ? `Vorschlag: ${wd(mondayOf(today), s.legs)}` : ''
   return (
@@ -244,7 +240,7 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
         const focus = mergeFocus(current?.focus, which)
         const hard = which === 'legs' ? legs.hard || !!current?.hard : focus === 'full' ? !!current?.hard : true
         if (!done) await log.setGym(today, { focus, hard })
-        if (which === 'upper') writeStore(UPPER_KEY, variant)
+        if (which === 'upper') void setState('gym.upper.last', variant)
       }
       const failed = await saveSets()
       setRest(null)
@@ -360,11 +356,7 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
             onChange={(v) => {
               tap()
               setLevel(v)
-              try {
-                localStorage.setItem(LEVEL_KEY, v)
-              } catch {
-                // ohne Speicher bleibt es bei der Sitzung
-              }
+              void setState('stabi.level', v)
             }}
             options={STABI_LEVELS}
           />

@@ -3,7 +3,8 @@ import { Sheet } from '../components/Sheet'
 import { toast } from '../lib/toast'
 import { Card, Pill, Ring, SportIcon } from '../components/ui'
 import { dateLabel } from '../lib/format'
-import { guessType, handledIds, markHandled, openSuggestions, type GarminRace } from '../lib/garminRaces'
+import { useAppState } from '../lib/appState'
+import { guessType, markHandled, openSuggestions, type GarminRace } from '../lib/garminRaces'
 import { tap } from '../lib/haptics'
 import { coverage, FEEDBACK_LABEL, isPartial, progressOf, restoreOriginal } from '../lib/plan/adapt'
 import { addDays, daysBetween, localToday, mondayOf, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from '../lib/plan/dates'
@@ -29,7 +30,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
   const upcoming = plan.events.filter((e) => e.date >= today)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<RaceEvent | 'new' | { draft: Partial<RaceEvent>; garminId: number } | null>(null)
-  const [handled, setHandled] = useState(handledIds)
+  const handled = useAppState<number[]>('garmin.races.handled', [])
   const suggestions = openSuggestions(garminRaces ?? [], plan.events, today, handled)
   const [openId, setOpenId] = useState<string | null>(null)
   const [askPrio, setAskPrio] = useState(false)
@@ -102,8 +103,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               onClick={() => {
-                markHandled(r.id)
-                setHandled(handledIds())
+                void markHandled(r.id)
                 toast('Ausgeblendet.')
               }}
               className="min-h-11 rounded-xl bg-surface-2 text-sm font-medium text-ink-2"
@@ -153,8 +153,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
             // Zweites Rennen dazu und noch kein Hauptrennen gewählt: gleich fragen.
             if (isNew && several && !e.priority && !future.some((x) => x.priority)) setAskPrio(true)
             if (editing !== 'new' && 'draft' in editing) {
-              markHandled(editing.garminId)
-              setHandled(handledIds())
+              void markHandled(editing.garminId)
             }
             setSelectedId(e.id)
             setEditing(null)

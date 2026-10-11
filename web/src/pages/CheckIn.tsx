@@ -7,6 +7,7 @@ import { addDays, mondayOf, WEEKDAY_LONG, weekday } from '../lib/plan/dates'
 import type { PlanWorkout } from '../lib/plan/types'
 import { weekStrength } from '../lib/strength'
 import type { PlanState } from '../lib/plan/usePlan'
+import { setState, useAppState } from '../lib/appState'
 import { toast } from '../lib/toast'
 import type { DailyLogState } from '../lib/useDailyLog'
 import { StrengthSheet } from './Strength'
@@ -18,15 +19,6 @@ const FOCUS: { id: GymFocus; label: string }[] = [
   { id: 'core', label: 'Core' },
 ]
 const DRINKS = [0, 1, 2, 3, 4, 5]
-const DONE_KEY = 'checkin.done'
-
-const readDone = () => {
-  try {
-    return localStorage.getItem(DONE_KEY)
-  } catch {
-    return null
-  }
-}
 
 function gymText(g: GymEntry | undefined) {
   if (!g) return 'kein Krafttraining'
@@ -40,7 +32,7 @@ const drinkText = (n: number | undefined) => (n == null ? 'Alkohol offen' : n ==
  */
 export function CheckInCard({ log, plan, today, strengthToday }: { log: DailyLogState; plan: PlanState; today: string; strengthToday: boolean }) {
   const [open, setOpen] = useState<'yesterday' | 'today' | null>(null)
-  const [done, setDone] = useState(readDone)
+  const done = useAppState<string | null>('checkin.done', null)
   const yesterday = addDays(today, -1)
   const yesterdayDone = done === today || log.drinks[yesterday] != null
   const nextKey = plan.workouts.find((w) => w.date > today && w.key_session && w.status === 'planned' && w.sport !== 'race')
@@ -104,12 +96,7 @@ export function CheckInCard({ log, plan, today, strengthToday }: { log: DailyLog
           onClose={() => setOpen(null)}
           onSaved={(day) => {
             if (day === 'yesterday') {
-              try {
-                localStorage.setItem(DONE_KEY, today)
-              } catch {
-                // ohne Speicher zählt der Eintrag selbst
-              }
-              setDone(today)
+              void setState('checkin.done', today)
             }
             setOpen(null)
           }}
