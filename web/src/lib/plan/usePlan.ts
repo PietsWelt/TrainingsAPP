@@ -1,7 +1,8 @@
 // Lädt Rennen und Plan, hakt Einheiten anhand der Garmin-Aktivitäten ab und bietet alle Aktionen.
 
 import { useCallback, useEffect, useState } from 'react'
-import type { Activity, DailyMetrics } from '../types'
+import type { Best } from '../records'
+import type { Activity, DailyMetrics, GarminLactate } from '../types'
 import { autoComplete, fillSteps, giveFeedback, isPartial, skipWorkout } from './adapt'
 import { analyzeRun, merge, shiftPaces } from './analyze'
 import { catchUp, reentry } from './catchup'
@@ -28,6 +29,8 @@ export interface PlanState {
   skip(w: PlanWorkout): Promise<string>
   /** Speichert beliebige geänderte Einheiten (z.B. Anpassung an die Readiness). */
   applyChanges(changed: PlanWorkout[]): Promise<void>
+  /** Plant alle kommenden Rennen ab morgen neu, z.B. damit die Tempos zur gemessenen Schwelle passen. */
+  replan(): Promise<void>
   /** Einschätzung nach der Einheit; liefert den Hinweistext. */
   rate(w: PlanWorkout, feedback: Feedback | null): Promise<string>
 }
@@ -45,13 +48,21 @@ function friendly(e: unknown): string {
 /** `day` ändert sich beim ersten Öffnen an einem neuen Tag, damit Verpasstes auch ohne neue Daten nachgezogen wird. */
 // Feste leere Liste: ein neues [] bei jedem Aufruf würde den Plan endlos neu laden.
 const NO_METRICS: DailyMetrics[] = []
+const NO_RECORDS: Best[] = []
+const NO_LACTATE: GarminLactate[] = []
 // Aktivitäten, deren automatischen Haken du entfernt hast: werden keiner Einheit mehr zugeordnet.
 // Liegen in app_state, damit ein am Handy entfernter Haken nicht am PC zurückkommt.
 const readReleased = (): number[] => getState<number[]>('plan.released', [])
 const release = (id: number) => void addToList('plan.released', id)
 const readApplied = () => getState<{ date: string; level: number } | null>('overload.applied', null)
 
-export function usePlan(activities: Activity[] | undefined, day = localToday(), metrics: DailyMetrics[] = NO_METRICS): PlanState {
+export function usePlan(
+  activities: Activity[] | undefined,
+  day = localToday(),
+  metrics: DailyMetrics[] = NO_METRICS,
+  records: Best[] = NO_RECORDS,
+  lactate: GarminLactate[] = NO_LACTATE,
+): PlanState {
   const [events, setEvents] = useState<RaceEvent[]>([])
   const [workouts, setWorkouts] = useState<PlanWorkout[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,7 +79,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
       const usable = activities.filter((a) => !released.has(a.id))
       const done = autoComplete(ws, usable, today)
       // Ablauf für die Uhr bei älteren Plänen nachtragen (Plan ab heute neu berechnen, nur Abläufe übernehmen).
-      const fresh = hasColumn('steps') ? generateAll(ev, fitnessFrom(activities ?? [], today), addDays(today, -1), () => crypto.randomUUID()) : []
+      const fresh = hasColumn('steps') ? generateAll(ev, fitnessFrom(activities ?? [], today, records, lactate), addDays(today, -1), () => crypto.randomUUID()) : []
       const filled = hasColumn('steps')
         ? ev
             .filter((e) => e.date >= today)
@@ -127,7 +138,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
     } finally {
       setLoading(false)
     }
-  }, [activities, day, metrics])
+  }, [activities, day, metrics, records, lactate])
 
   useEffect(() => {
     void reload()
@@ -145,7 +156,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
   async function replanAll(list: RaceEvent[]) {
     const today = localToday()
     const tomorrow = addDays(today, 1)
-    const plan = generateAll(list, fitnessFrom(activities ?? [], today), today, () => crypto.randomUUID())
+    const plan = generateAll(list, fitnessFrom(activities ?? [], today, records, lactate), today, () => crypto.randomUUID())
     for (const e of list.filter((x) => x.date >= tomorrow)) await planStore.replaceFrom(e.id, tomorrow, plan.filter((w) => w.event_id === e.id))
   }
 
@@ -178,6 +189,10 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
       for (const x of events) if (x.priority && x.id !== id) await planStore.saveEvent({ ...x, priority: false })
       await planStore.saveEvent(list.find((x) => x.id === id)!)
       await replanAll(list)
+      await reload()
+    },
+    async replan() {
+      await replanAll(events)
       await reload()
     },
     async setStatus(w, status) {

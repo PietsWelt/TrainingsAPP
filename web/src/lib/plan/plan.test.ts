@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { autoComplete, coverage, fillSteps, isPartial, giveFeedback, legsProposal, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
 import { stepLines } from './labels'
-import { generatePlan, pacesFor, phasesFor, volumesFor } from './generate'
+import { deloadWeeks, generatePlan, longCapKm, LONG_MAX_MIN, MAX_GAIN, pacesFor, paceSchedule, peakKm, phasesFor, planThreshold, volumesFor } from './generate'
+import { explain } from './explain'
 import type { Readiness } from '../readiness'
 import type { Fitness, PlanWorkout, RaceEvent } from './types'
 
@@ -30,7 +31,7 @@ describe('phasesFor', () => {
 })
 
 describe('volumesFor', () => {
-  it('grows at most 8 % per week, deloads every 4th week and stays below the cap', () => {
+  it('grows at most 8 % per week, deloads after 3 load weeks and stays below the cap', () => {
     const v = volumesFor(phasesFor(12, 2), 30, 50)
     expect(v[1]).toBeCloseTo(32.4)
     expect(v[3]).toBeCloseTo(v[2] * 0.75)
@@ -354,5 +355,86 @@ describe('legsProposal', () => {
     expect(legsProposal(plan, key.date, null)).toBeNull()
     const easyDay = plan.find((w) => !w.key_session)!
     expect(legsProposal(plan, easyDay.date, { daysAgo: 1, hard: true })).toBeNull()
+  })
+})
+
+describe('Plan nach gemessener Form', () => {
+  const anchored = (pace: number): Fitness => ({ ...fit, threshold: { pace, source: 'brustgurt', date: '2026-09-30' } })
+  const strip = (ws: PlanWorkout[]) => ws.map(({ id: _id, ...w }) => w)
+
+  it('bleibt ohne Messwert wie bisher', () => {
+    expect(strip(generatePlan(ev(), { ...fit, threshold: null }, TODAY, id))).toEqual(strip(generatePlan(ev(), fit, TODAY, id)))
+    expect(paceSchedule('half', 6300, null, 10)(3)).toEqual(pacesFor('half', 6300))
+  })
+
+  it('beginnt in Woche 1 bei der heutigen Schwelle und nennt die Quelle', () => {
+    const plan = generatePlan(ev(), anchored(300), TODAY, id)
+    expect(planThreshold(plan, 'half', TODAY)).toBeCloseTo(300, -0.5)
+    const easy = plan.find((w) => w.kind === 'easy' && w.steps)!
+    expect(easy.description).toContain('Tempo nach deiner Laktatschwelle (Brustgurt, 30. Sept.)')
+    expect(explain(easy)!.pace).toContain('aus deiner Laktatschwelle (Brustgurt, 30. Sept.)')
+  })
+
+  it('wird bis zum Tapering höchstens 3 % schneller, auch bei einem unrealistischen Ziel', () => {
+    // Heute 5:00/km an der Schwelle, Ziel 1:30 h im Halbmarathon (Schwelle ≈ 4:15/km).
+    const at = paceSchedule('half', 5400, 300, 12)
+    for (let w = 0; w <= 14; w++) expect(at(w)!.threshold).toBeGreaterThanOrEqual(300 * (1 - MAX_GAIN) - 0.01)
+    expect(at(0)!.threshold).toBeCloseTo(300)
+    expect(at(12)!.threshold).toBeCloseTo(291)
+    // Wettkampftempo: das realistische, mit Hinweis aufs Ziel
+    expect(at(12)!.goalRace).toBeCloseTo(5400 / 21.0975)
+    expect(at(12)!.race).toBeGreaterThan(at(12)!.goalRace!)
+    const plan = generatePlan(ev({ goal_time_s: 5400 }), anchored(300), TODAY, id)
+    expect(plan.some((w) => w.description?.includes('nach deiner Form realistisch'))).toBe(true)
+  })
+
+  it('trainiert das Zieltempo, wenn das Ziel nah an der Form liegt, und bleibt schneller als das Ziel bei den heutigen Tempos', () => {
+    const goal = pacesFor('half', 6300)!
+    const near = paceSchedule('half', 6300, goal.threshold * 1.02, 10)
+    expect(near(10)!.race).toBeCloseTo(goal.race)
+    expect(near(10)!.goalRace).toBeUndefined()
+    const fast = paceSchedule('half', 6300, goal.threshold * 0.95, 10)
+    expect(fast(10)!.threshold).toBeCloseTo(goal.threshold * 0.95)
+    expect(fast(10)!.race).toBeCloseTo(goal.race)
+  })
+})
+
+describe('Zeitgrenze für den langen Lauf', () => {
+  it('Marathon 4:30 h: kein langer Lauf über 180 min', () => {
+    const plan = generatePlan(ev({ type: 'marathon', goal_time_s: 16200, days_per_week: 5, date: '2027-04-04' }), { ...fit, weeklyRunKm: 50, longestRunKm: 24 }, TODAY, id)
+    const long = plan.filter((w) => w.kind === 'long')
+    expect(Math.max(...long.map((w) => w.duration_min!))).toBeLessThanOrEqual(LONG_MAX_MIN.marathon)
+  })
+  it('rechnet die Grenze über das lockere Tempo in Kilometer um', () => {
+    const p = pacesFor('marathon', 16200)!
+    expect((longCapKm('marathon', p) * ((p.easy[0] + p.easy[1]) / 2) * 1.03) / 60).toBeCloseTo(180)
+    expect(longCapKm('5k', null)).toBeCloseTo((90 * 60) / (360 * 1.03))
+  })
+})
+
+describe('Entlastungswochen', () => {
+  it('liegen nie direkt vor dem Tapering, nie doppelt und nach höchstens 4 Belastungswochen', () => {
+    for (const weeks of [12, 16, 26])
+      for (const taper of [1, 2, 3]) {
+        const phases = phasesFor(weeks, taper)
+        const d = deloadWeeks(phases)
+        const firstTaper = phases.indexOf('taper')
+        expect(d[firstTaper - 1]).toBe(false)
+        phases.forEach((p, i) => p === 'taper' && expect(d[i]).toBe(false))
+        for (let i = 1; i < d.length; i++) expect(d[i] && d[i - 1]).toBe(false)
+        let run = 0
+        for (let i = 0; i < firstTaper; i++) {
+          run = d[i] ? 0 : run + 1
+          expect(run).toBeLessThanOrEqual(4)
+        }
+      }
+  })
+})
+
+describe('Spitzenumfang nach Zeit', () => {
+  it('Marathon 4:30 h bleibt deutlich unter 85 km, 3:00 h bei 85 km', () => {
+    expect(peakKm('marathon', pacesFor('marathon', 16200))).toBeLessThan(75)
+    expect(peakKm('marathon', pacesFor('marathon', 10800))).toBe(85)
+    expect(peakKm('marathon', null)).toBe(85)
   })
 })

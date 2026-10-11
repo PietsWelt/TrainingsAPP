@@ -95,6 +95,8 @@ export interface Fitness {
   weeklyRunKm: number
   longestRunKm: number
   weeklyHours: { swim: number; bike: number; run: number }
+  /** Gemessene Schwelle (s/km) als Ausgangspunkt der Tempos; ohne Messwert gelten die Tempos aus der Zielzeit. */
+  threshold?: { pace: number; source: 'brustgurt' | 'garmin' | 'bestzeit'; date: string } | null
 }
 
 export const PHASE_LABEL: Record<Phase, string> = {
