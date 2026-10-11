@@ -1,20 +1,27 @@
+import { useState } from 'react'
 import { Card, StatusLabel } from '../components/ui'
+import { anchorText, type Anchor } from '../lib/plan/anchor'
+import { fitnessFrom } from '../lib/plan/fitness'
+import type { PlanState } from '../lib/plan/usePlan'
+import { toast } from '../lib/toast'
 import { fitnessSeries, formZone } from '../lib/fitness'
 import { dateLabel } from '../lib/format'
 import { addDays, daysBetween } from '../lib/plan/dates'
-import { fmtDuration } from '../lib/plan/generate'
+import { fmtDuration, fmtPace, planThreshold, RETUNE_AT } from '../lib/plan/generate'
 import { isTri, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 import { prognose, verdict } from '../lib/prognosis'
 import { DISTANCES, type Best } from '../lib/records'
-import type { Activity, RacePrediction } from '../lib/types'
+import type { Activity, GarminLactate, RacePrediction } from '../lib/types'
 
 /** Zielzeit gegen Prognose aus Bestzeiten und Garmin, plus Form am Renntag laut Plan. */
-export function RaceCheck({ event, workouts, activities, records, predictions, today }: {
+export function RaceCheck({ event, workouts, activities, records, predictions, lactate, plan, today }: {
   event: RaceEvent
   workouts: PlanWorkout[]
   activities: Activity[]
   records: Best[]
   predictions?: RacePrediction[]
+  lactate?: GarminLactate[]
+  plan?: PlanState
   today: string
 }) {
   if (event.date < today) return null
@@ -23,7 +30,9 @@ export function RaceCheck({ event, workouts, activities, records, predictions, t
   const weeksLeft = Math.floor(daysBetween(today, event.date) / 7)
   const v = p && event.goal_time_s ? verdict(event.goal_time_s, p.time_s, weeksLeft) : null
   const form = event.date <= addDays(today, 182) ? fitnessSeries(activities, workouts, event.date, event.date, today).at(-1) : undefined
-  if (!p && !form) return null
+  const anchor = isTri(event.type) ? null : fitnessFrom(activities, today, records, lactate).threshold
+  const tempo = !isTri(event.type) && (anchor || event.goal_time_s) ? <TempoSource event={event} workouts={workouts} anchor={anchor ?? null} plan={plan} today={today} /> : null
+  if (!p && !form && !tempo) return null
 
   return (
     <Card title="Ziel-Check" subtitle={`Noch ${weeksLeft} ${weeksLeft === 1 ? 'Woche' : 'Wochen'} Training`}>
@@ -52,8 +61,9 @@ export function RaceCheck({ event, workouts, activities, records, predictions, t
           </ul>
         </>
       )}
+      {tempo && <div className={p ? 'mt-4 border-t border-line pt-3' : ''}>{tempo}</div>}
       {form && (
-        <div className={p ? 'mt-4 border-t border-line pt-3' : ''}>
+        <div className={p || tempo ? 'mt-4 border-t border-line pt-3' : ''}>
           <div className="flex items-baseline justify-between">
             <span className="text-sm font-medium">Form am Renntag laut Plan</span>
             <span className="text-[17px] font-semibold">
@@ -105,5 +115,50 @@ function GapBar({ goal, pred }: { goal: number; pred: number }) {
         <span>langsamer</span>
       </div>
     </div>
+  )
+}
+
+/** Woher die Tempos kommen; weicht die gemessene Schwelle deutlich vom Plan ab, gibt es „Tempos anpassen“. */
+function TempoSource({ event, workouts, anchor, plan, today }: { event: RaceEvent; workouts: PlanWorkout[]; anchor: Anchor | null; plan?: PlanState; today: string }) {
+  const [busy, setBusy] = useState(false)
+  const inPlan = planThreshold(workouts.filter((w) => w.event_id === event.id), event.type, today)
+  if (!anchor) return <p className="text-xs text-ink-2">Tempos aus deiner Zielzeit. Mit Brustgurt-Läufen, Garmins Laktatschwelle oder einer aktuellen Bestzeit richten sie sich nach deiner Form.</p>
+  const off = inPlan ? (inPlan - anchor.pace) / anchor.pace : 0
+  return (
+    <>
+      <div className="flex items-baseline justify-between">
+        <span className="text-sm font-medium">Deine Schwelle</span>
+        <span className="text-[17px] font-semibold">{fmtPace(anchor.pace)}/km</span>
+      </div>
+      <p className="mt-0.5 text-xs text-ink-2">Tempos aus {anchorText(anchor)}.</p>
+      {Math.abs(off) > RETUNE_AT && inPlan && (
+        <>
+          <p className="mt-2 text-sm">
+            <StatusLabel status="warning">
+              Der Plan rechnet mit {fmtPace(inPlan)}/km, {off > 0 ? 'langsamer' : 'schneller'} als deine Schwelle.
+            </StatusLabel>
+          </p>
+          {plan && (
+            <button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                try {
+                  await plan.replan()
+                  toast('Tempos angepasst. Der Plan ist ab morgen neu berechnet.')
+                } catch (e) {
+                  toast((e as Error).message, 'error')
+                } finally {
+                  setBusy(false)
+                }
+              }}
+              className="mt-2 min-h-11 w-full rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60"
+            >
+              {busy ? 'Wird angepasst …' : 'Tempos anpassen'}
+            </button>
+          )}
+        </>
+      )}
+    </>
   )
 }

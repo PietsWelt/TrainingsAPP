@@ -1,6 +1,8 @@
 // Regelbasierter Trainingsplan: Periodisierung (Grundlage → Aufbau → Spitze → Tapering),
-// ~8 % Steigerung pro Woche, jede 4. Woche Entlastung, ca. 80 % locker / 20 % intensiv.
+// ~8 % Steigerung pro Woche, Entlastung nach 3 Belastungswochen bzw. am Phasenende, ca. 80 % locker / 20 % intensiv.
+// Tempos starten bei deiner gemessenen Schwelle und nähern sich dem Ziel um höchstens 3 %.
 
+import { anchorText } from './anchor'
 import { addDays, daysBetween, mondayOf } from './dates'
 import { isTri, type EventType, type RepeatStep, type Step, type WorkStep, type Fitness, type Kind, type Phase, type PlanWorkout, type RaceEvent, type RunEventType, type Sport, type TriEventType } from './types'
 
@@ -48,6 +50,24 @@ export function phasesFor(weeks: number, taper: number): Phase[] {
 // Tapering: Umfang insgesamt um gut 40 % senken, Intensität und Häufigkeit halten (Bosquet et al. 2007).
 const TAPER_FACTORS: Record<number, number[]> = { 1: [0.55], 2: [0.65, 0.5], 3: [0.75, 0.6, 0.45] }
 
+/**
+ * Entlastungswochen: nach 3 Belastungswochen, oder in der letzten Woche einer Phase, wenn davor
+ * mindestens 2 Belastungswochen lagen. Nie im Tapering und nie direkt davor, das Tapering entlastet ohnehin.
+ */
+export function deloadWeeks(phases: Phase[]): boolean[] {
+  let loads = 0
+  return phases.map((p, i) => {
+    const next = phases[i + 1]
+    if (p === 'taper' || next === 'taper') {
+      loads++
+      return false
+    }
+    const deload = loads >= 3 || (next !== undefined && next !== p && loads >= 2)
+    loads = deload ? 0 : loads + 1
+    return deload
+  })
+}
+
 /** Wochenumfang je Woche (km oder Stunden). */
 export function volumesFor(phases: Phase[], start: number, peak: number): number[] {
   const out: number[] = []
@@ -55,11 +75,12 @@ export function volumesFor(phases: Phase[], start: number, peak: number): number
   let lastFull = start
   const nTaper = phases.filter((p) => p === 'taper').length
   const taperF = TAPER_FACTORS[nTaper] ?? TAPER_FACTORS[3].slice(-nTaper)
+  const deload = deloadWeeks(phases)
   let ti = 0
   phases.forEach((p, i) => {
     if (p === 'taper') {
       out.push(lastFull * taperF[ti++])
-    } else if (i % 4 === 3) {
+    } else if (deload[i]) {
       out.push(lastFull * 0.75) // Entlastungswoche
     } else {
       out.push(v)
@@ -78,6 +99,8 @@ export interface Paces {
   threshold: number
   marathon: number
   easy: [number, number]
+  /** Zieltempo, wenn das Wettkampftempo nach deiner Form langsamer angesetzt ist als das Ziel. */
+  goalRace?: number
 }
 
 /**
@@ -99,6 +122,60 @@ export function pacesFor(type: EventType, goalS: number | null): Paces | null {
   }
 }
 
+/** Bis zum Tapering werden die Trainingstempos höchstens so viel schneller als deine heutige Schwelle. */
+export const MAX_GAIN = 0.03
+/** Liegt das Ziel höchstens so weit über deiner Form, wird im Wettkampftempo das Zieltempo trainiert. */
+const RACE_REACH = 0.05
+
+/** Tempos zu einer Schwelle: Alle Tempos in `pacesFor()` sind proportional zur Zielzeit. */
+export function pacesFromThreshold(type: EventType, pace: number): Paces | null {
+  const unit = pacesFor(type, 1)
+  return unit ? pacesFor(type, pace / unit.threshold) : null
+}
+
+/**
+ * Tempos je Woche (0 = erste Woche): Start bei der gemessenen Schwelle, bis zum Tapering (`buildWeeks`)
+ * linear zum Ziel, aber höchstens `MAX_GAIN` schneller als heute. Ohne Messwert die Tempos aus der Zielzeit.
+ */
+export function paceSchedule(type: EventType, goalS: number | null, anchor: number | null | undefined, buildWeeks: number): (week: number) => Paces | null {
+  const goal = pacesFor(type, goalS)
+  const now = anchor ? pacesFromThreshold(type, anchor) : null
+  if (!now) return () => goal
+  // Bist du schon schneller als das Ziel, bleibt es bei den heutigen Tempos.
+  const end = goal ? Math.min(now.threshold, Math.max(goal.threshold, now.threshold * (1 - MAX_GAIN))) : now.threshold
+  const reachable = !goal || goal.threshold >= now.threshold * (1 - RACE_REACH)
+  const race = goal && reachable ? goal.race : pacesFromThreshold(type, end)!.race
+  return (week) => {
+    const f = buildWeeks > 0 ? Math.min(1, Math.max(0, week / buildWeeks)) : 1
+    const p = pacesFromThreshold(type, now.threshold + (end - now.threshold) * f)!
+    const out: Paces = { ...p, race }
+    if (goal && !reachable) out.goalRace = goal.race
+    // Beim Marathon ist das Marathontempo das Wettkampftempo.
+    if (type === 'marathon') out.marathon = race
+    return out
+  }
+}
+
+/**
+ * Schwelle, mit der die nächsten Einheiten im Plan gerechnet sind: aus dem Tempo des nächsten lockeren
+ * Abschnitts zurückgerechnet (locker und Schwelle stehen in `pacesFor()` in festem Verhältnis).
+ */
+export function planThreshold(workouts: PlanWorkout[], type: EventType, today: string): number | null {
+  const unit = pacesFor(type, 1)
+  if (!unit) return null
+  const easyStep = (steps: Step[] | null | undefined): WorkStep | undefined =>
+    steps?.flatMap((s) => (s.type === 'repeat' ? s.steps : [s])).find((s) => s.pace != null && s.pace_slow != null)
+  for (const w of workouts) {
+    if (w.date <= today || w.status !== 'planned' || w.sport !== 'run' || w.original) continue
+    const s = easyStep(w.steps)
+    if (s) return s.pace! / (unit.easy[0] / unit.threshold)
+  }
+  return null
+}
+
+/** Ab dieser Abweichung zwischen gemessener Schwelle und Plan bietet die App an, die Tempos anzupassen. */
+export const RETUNE_AT = 0.03
+
 export function fmtPace(s: number): string {
   const m = Math.floor(s / 60)
   const r = Math.round(s % 60)
@@ -116,6 +193,8 @@ const ZONE_TEXT: Record<Zone, string> = {
 function at(z: Zone, p: Paces | null): string {
   if (!p) return ZONE_TEXT[z]
   if (z === 'easy') return `${fmtPace(p.easy[1])}–${fmtPace(p.easy[0])}/km`
+  if (p.goalRace && (z === 'race' || (z === 'marathon' && p.marathon === p.race)))
+    return `Zieltempo ${fmtPace(p.goalRace)}/km, nach deiner Form realistisch ${fmtPace(p.race)}/km`
   return `${fmtPace(p[z])}/km`
 }
 
@@ -287,7 +366,18 @@ function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: num
   return strides(4)
 }
 
-function runLong(type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null): Draft {
+/** Längste Dauer eines langen Laufs in Minuten: Darüber steigen Ermüdung und Verletzungsrisiko stärker als der Nutzen. */
+export const LONG_MAX_MIN: Record<RunEventType, number> = { '5k': 90, '10k': 105, half: 150, marathon: 180 }
+
+/** Strecke, die in `LONG_MAX_MIN` passt (mit dem Faktor 1,03 wie in `runMinutes` für lange Läufe). */
+export function longCapKm(type: RunEventType, p: Paces | null): number {
+  const pace = p ? (p.easy[0] + p.easy[1]) / 2 : 360
+  return (LONG_MAX_MIN[type] * 60) / (pace * 1.03)
+}
+
+const fmtHours = (min: number) => (min % 60 ? `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')} h` : `${min / 60} h`)
+
+function runLong(type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null, capped = false): Draft {
   let description = `Ruhig und gleichmäßig (${at('easy', p)}).`
   let steps: Step[] | undefined
   const total = meters(km)
@@ -305,6 +395,7 @@ function runLong(type: RunEventType, phase: Phase, pw: number, km: number, p: Pa
     description = `Ruhig beginnen, die letzten 4 km im ${at('race', p)}.`
     steps = [work({ m: Math.max(1000, total - 4000), note: 'Ruhig', ...easyPace(p) }), work({ m: 4000, pace: pz('race', p), note: 'Wettkampftempo' })]
   }
+  if (capped) description += ` Höchstens ${fmtHours(LONG_MAX_MIN[type])}, auch wenn du dafür nicht die volle Strecke schaffst.`
   return { sport: 'run', kind: 'long', title: 'Langer Lauf', description, distance_km: r1(km), duration_min: runMinutes(km, p, 1.03), key_session: true, steps }
 }
 
@@ -325,7 +416,9 @@ function runEasy(km: number, p: Paces | null, recovery = false): Draft {
 function runWeek(type: RunEventType, phase: Phase, pw: number, km: number, roles: RunRole[], p: Paces | null, longCap = Infinity): Map<RunRole, Draft> {
   const spec = RUN[type]
   const qCount = roles.filter((r) => r === 'Q1' || r === 'Q2').length
-  const long = Math.min(longCap, spec.longMax, Math.max(spec.longMin * (phase === 'taper' ? 0.7 : 1), km * 0.3))
+  const wanted = Math.min(longCap, spec.longMax, Math.max(spec.longMin * (phase === 'taper' ? 0.7 : 1), km * 0.3))
+  const timeCap = longCapKm(type, p)
+  const long = Math.min(wanted, timeCap)
   const q = Math.min(16, Math.max(6, km * 0.17))
   const easyRoles = roles.filter((r) => r === 'E' || r === 'R').length
   // Ein lockerer Lauf soll nie länger als ~70 % des langen Laufs werden; bei wenigen Tagen sinkt dann der Wochenumfang.
@@ -333,7 +426,7 @@ function runWeek(type: RunEventType, phase: Phase, pw: number, km: number, roles
   const m = new Map<RunRole, Draft>()
   m.set('Q1', runQuality('Q1', type, phase, pw, q, p))
   m.set('Q2', runQuality('Q2', type, phase, pw, q, p))
-  m.set('L', runLong(type, phase, pw, long, p))
+  m.set('L', runLong(type, phase, pw, long, p, wanted > timeCap))
   m.set('E', runEasy(easy, p))
   m.set('R', runEasy(Math.min(easy, 6), p, true))
   return m
@@ -456,6 +549,19 @@ export function fmtDuration(s: number): string {
 
 // ---------- Hauptfunktion ----------
 
+/** Höchstens so viele Stunden Laufen pro Woche in der Spitze (Startwerte, nach den ersten Plänen nachjustieren). */
+export const PEAK_HOURS: Record<RunEventType, number> = { '5k': 5, '10k': 6, half: 7, marathon: 8.5 }
+
+/** Spitzenumfang in km: höchstens `PEAK_HOURS` beim mittleren lockeren Tempo. */
+export function peakKm(type: RunEventType, p: Paces | null): number {
+  return p ? Math.min(RUN[type].peakKm, (PEAK_HOURS[type] * 3600) / ((p.easy[0] + p.easy[1]) / 2)) : RUN[type].peakKm
+}
+
+/** Einleitung des Quellen-Hinweises in der Beschreibung. */
+export const PACE_SOURCE = 'Tempo nach'
+
+const hasPace = (steps: Step[] | undefined): boolean => !!steps?.some((s) => (s.type === 'repeat' ? hasPace(s.steps) : s.pace != null))
+
 /**
  * Erstellt alle Einheiten ab morgen bis zum Renntag.
  * `today` als YYYY-MM-DD, `newId` liefert eindeutige IDs.
@@ -469,7 +575,8 @@ export function generatePlan(event: RaceEvent, fitness: Fitness, today: string, 
   const tri = isTri(event.type)
   const spec = tri ? TRI[event.type as TriEventType] : RUN[event.type as RunEventType]
   const phases = phasesFor(weeks, spec.taper)
-  const paces = pacesFor(event.type, event.goal_time_s)
+  const anchor = tri ? null : fitness.threshold
+  const pacesAt = paceSchedule(event.type, event.goal_time_s, anchor?.pace, phases.filter((p) => p !== 'taper').length)
   const dpw = Math.min(7, Math.max(3, event.days_per_week))
 
   let volumes: number[]
@@ -483,7 +590,9 @@ export function generatePlan(event: RaceEvent, fitness: Fitness, today: string, 
     // Renndistanz eigentlich mehr verlangt. Ohne Laufdaten gilt der Mindestumfang.
     const current = fitness.weeklyRunKm
     const from = current > 0 ? Math.max(current, Math.min(s.minKm, current * 1.15)) : s.minKm
-    volumes = volumesFor(phases, Math.min(s.peakKm * 0.75, from), s.peakKm)
+    // Spitzenumfang nach Zeit begrenzen: Wer langsamer läuft, braucht für dieselben km mehr Stunden.
+    const peak = peakKm(event.type as RunEventType, pacesAt(0))
+    volumes = volumesFor(phases, Math.min(peak * 0.75, from), peak)
   }
   // Langer Lauf höchstens 10 % länger als dein bisher längster der letzten 30 Tage bzw. des Plans
   // (Frandsen et al. 2025, BJSM: Verletzungsrisiko steigt bei Einzelläufen deutlich darüber).
@@ -492,9 +601,12 @@ export function generatePlan(event: RaceEvent, fitness: Fitness, today: string, 
   const out: PlanWorkout[] = []
   // Die Rennwoche beginnt 6 Tage vor dem Rennen; normale Wochen enden davor.
   const raceWeekStart = addDays(event.date, -6)
+  // Woher die Tempos stammen, steht in der Beschreibung (und in „Warum diese Einheit?“).
+  const source = anchor ? ` ${PACE_SOURCE} ${anchorText(anchor)}.` : ''
   const push = (date: string, week: number, phase: Phase, d: Draft, isRaceWeek = false) => {
     if (date < start || date > event.date) return
     if (!isRaceWeek && date >= raceWeekStart) return
+    if (source && d.sport === 'run' && hasPace(d.steps)) d = { ...d, description: d.description + source }
     out.push({ ...d, id: newId(), event_id: event.id, date, phase, week_index: week, status: 'planned', activity_id: null, moved_from: null })
   }
 
@@ -505,7 +617,7 @@ export function generatePlan(event: RaceEvent, fitness: Fitness, today: string, 
     const monday = addDays(firstMonday, w * 7)
 
     if (w === weeks - 1) {
-      for (const [offset, d] of raceWeek(event, paces)) push(addDays(event.date, offset), w + 1, phase, d, true)
+      for (const [offset, d] of raceWeek(event, pacesAt(w))) push(addDays(event.date, offset), w + 1, phase, d, true)
       continue
     }
 
@@ -515,7 +627,7 @@ export function generatePlan(event: RaceEvent, fitness: Fitness, today: string, 
       for (const [day, role] of layout) push(addDays(monday, day), w + 1, phase, drafts.get(role)!)
     } else {
       const layout = rotate(RUN_TEMPLATES[dpw], 6, event.long_day)
-      const drafts = runWeek(event.type as RunEventType, phase, pw, volumes[w], layout.map(([, r]) => r), paces, longest > 0 ? longest * 1.1 : Infinity)
+      const drafts = runWeek(event.type as RunEventType, phase, pw, volumes[w], layout.map(([, r]) => r), pacesAt(w), longest > 0 ? longest * 1.1 : Infinity)
       if (layout.some(([, r]) => r === 'L')) longest = Math.max(longest, drafts.get('L')!.distance_km ?? 0)
       for (const [day, role] of layout) push(addDays(monday, day), w + 1, phase, drafts.get(role)!)
     }

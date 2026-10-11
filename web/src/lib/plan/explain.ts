@@ -1,7 +1,7 @@
 // Warum eine Einheit im Plan steht: Zweck, was sie im Körper bewirkt und was die Forschung dazu sagt.
 // Bewusst vorsichtig formuliert: Wo die Studienlage dünn ist, steht das auch so da.
 
-import type { Kind, Phase, PlanWorkout } from './types'
+import type { Kind, Phase, PlanWorkout, Step } from './types'
 
 export interface Explanation {
   /** Ein Satz für Listen und „Heute“. */
@@ -139,8 +139,18 @@ const PHASE_NOTE: Record<Phase, string> = {
   taper: 'Tapering: Umfang runter, Intensität halten, damit du frisch an den Start gehst.',
 }
 
-export function explain(w: Pick<PlanWorkout, 'kind' | 'sport' | 'phase'>): (Explanation & { phase: string }) | null {
+const hasPace = (steps: Step[] | null | undefined): boolean => !!steps?.some((s) => (s.type === 'repeat' ? hasPace(s.steps) : s.pace != null))
+
+/** Woher die Tempos der Einheit stammen. Die Quelle schreibt die Plan-Erzeugung in die Beschreibung. */
+export function paceSource(w: Pick<PlanWorkout, 'description' | 'steps' | 'sport'>): string | null {
+  if (w.sport !== 'run' || !hasPace(w.steps)) return null
+  const m = w.description?.match(/Tempo nach (deiner Laktatschwelle \([^)]*\)|deiner Bestzeit vom \S+ [^\s.]+\.?)/)
+  if (!m) return 'Die Tempos stammen aus deiner Zielzeit. Sobald es Messwerte gibt (Brustgurt, Garmin-Laktatschwelle oder eine aktuelle Bestzeit), richten sie sich nach deiner Form.'
+  return `Die Tempos stammen aus ${m[1].replace(/\.$/, '')}. Sie starten bei deiner Form von heute und werden bis zum Tapering höchstens 3 % schneller, auch wenn das Ziel mehr verlangt.`
+}
+
+export function explain(w: Pick<PlanWorkout, 'kind' | 'sport' | 'phase'> & Partial<Pick<PlanWorkout, 'description' | 'steps'>>): (Explanation & { phase: string; pace: string | null }) | null {
   const base = BASE[w.sport === 'race' ? 'race' : w.kind]
   if (!base) return null
-  return { ...base, ...SPORT_TWEAK[`${w.sport}:${w.kind}`], phase: PHASE_NOTE[w.phase] }
+  return { ...base, ...SPORT_TWEAK[`${w.sport}:${w.kind}`], phase: PHASE_NOTE[w.phase], pace: paceSource({ description: w.description ?? null, steps: w.steps, sport: w.sport }) }
 }

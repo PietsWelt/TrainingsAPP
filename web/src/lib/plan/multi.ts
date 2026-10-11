@@ -119,6 +119,7 @@ export function fitnessFromPlan(ws: PlanWorkout[], raceDate: string, fallback: F
   }
   const f = 0.9
   return {
+    ...fallback,
     weeklyRunKm: Math.max(fallback.weeklyRunKm, km * f),
     longestRunKm: Math.max(fallback.longestRunKm, longest * f),
     weeklyHours: { swim: Math.max(fallback.weeklyHours.swim, hours.swim * f), bike: Math.max(fallback.weeklyHours.bike, hours.bike * f), run: Math.max(fallback.weeklyHours.run, hours.run * f) },

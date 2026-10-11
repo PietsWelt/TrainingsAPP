@@ -17,7 +17,7 @@ import { AnalysisBlock, FeedbackChips } from './PlanFeedback'
 import { analysisFor } from '../lib/plan/analyze'
 import { replacedBy } from '../lib/plan/catchup'
 import { explain } from '../lib/plan/explain'
-import type { Activity, RacePrediction } from '../lib/types'
+import type { Activity, GarminLactate, RacePrediction } from '../lib/types'
 import type { Best } from '../lib/records'
 import { RaceCheck } from './PlanInsights'
 import { arrange, planScope } from '../lib/plan/multi'
@@ -25,7 +25,7 @@ import { PrioritySheet, PriorityCard, PriorityQuestion, PrioStar } from './PlanP
 import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
 
-export function Plan({ plan, gym, activities, records, predictions, garminRaces }: { plan: PlanState; gym?: GymByDate; activities?: Activity[]; records?: Best[]; predictions?: RacePrediction[]; garminRaces?: GarminRace[] }) {
+export function Plan({ plan, gym, activities, records, predictions, garminRaces, lactate }: { plan: PlanState; gym?: GymByDate; activities?: Activity[]; records?: Best[]; predictions?: RacePrediction[]; garminRaces?: GarminRace[]; lactate?: GarminLactate[] }) {
   const today = localToday()
   const upcoming = plan.events.filter((e) => e.date >= today)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -131,7 +131,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
         <>
           <EventHeader event={selected} workouts={ownWorkouts} today={today} activities={activities} sideOf={hostName(selected.id)} onEdit={() => setEditing(selected)} />
           <PriorityCard arr={arr} event={selected} events={plan.events} onChange={() => setAskPrio(true)} />
-          <RaceCheck event={selected} workouts={ownWorkouts} activities={activities ?? []} records={records ?? []} predictions={predictions} today={today} />
+          <RaceCheck event={selected} workouts={ownWorkouts} activities={activities ?? []} records={records ?? []} predictions={predictions} lactate={lactate} plan={plan} today={today} />
           <WeekList activities={activities} workouts={workouts} all={plan.workouts} gym={gym ?? {}} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
         </>
       )}
@@ -725,6 +725,12 @@ function WhyCard({ w }: { w: PlanWorkout }) {
           <dt className="text-xs font-semibold text-ink-3 uppercase">Was Studien zeigen</dt>
           <dd className="mt-0.5 leading-relaxed text-ink-2">{e.evidence}</dd>
         </div>
+        {e.pace && (
+          <div>
+            <dt className="text-xs font-semibold text-ink-3 uppercase">Tempo</dt>
+            <dd className="mt-0.5 leading-relaxed text-ink-2">{e.pace}</dd>
+          </div>
+        )}
         <div className="rounded-2xl bg-surface-2 p-3">
           <dt className="text-xs font-semibold text-accent uppercase">Tipp</dt>
           <dd className="mt-0.5 leading-relaxed">{e.tip}</dd>
