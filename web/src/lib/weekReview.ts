@@ -3,7 +3,7 @@
 
 import type { DrinksByDate, GymByDate, GymEntry } from './dailyLog'
 import { activityLoad } from './fitness'
-import { avg, sportGroup, weekStart } from './format'
+import { avg, sportGroup, weekStart, type SportGroup } from './format'
 import { heatPct, HOT_PCT } from './heat'
 import { HILLY, zonesPlausible } from './plan/analyze'
 import { addDays, weekday } from './plan/dates'
@@ -19,6 +19,31 @@ export interface Tip {
   source?: string
 }
 
+/** Ein Lauf der Woche, ob geplant oder nicht. */
+export interface RunEntry {
+  id: number
+  date: string
+  name: string
+  km: number
+  durationS: number
+  load: number
+  /** Garmin hat keinen Lastwert geliefert, die App hat geschätzt. */
+  estimated: boolean
+  /** Einem Plan-Workout zugeordnet. */
+  planned: boolean
+}
+
+/** Woraus sich die Wochenlast zusammensetzt. */
+export interface LoadBreakdown {
+  bySport: { group: SportGroup; load: number; count: number }[]
+  /** Last aus Einheiten, die einem Plan-Workout zugeordnet sind. */
+  planned: number
+  /** Last aus allem, was nicht im Plan stand. */
+  extra: number
+  /** Anzahl Aktivitäten ohne Garmin-Wert (aus der Dauer geschätzt). */
+  estimated: number
+}
+
 export interface WeekReview {
   monday: string
   sunday: string
@@ -26,11 +51,16 @@ export interface WeekReview {
   complete: boolean
   runs: number
   runKm: number
+  /** Alle Läufe der Woche, auch die außerhalb des Plans. */
+  runList: RunEntry[]
+  extraRuns: number
+  extraRunKm: number
   hours: number
   sessions: number
   load: number
   /** Ø Wochenlast der 4 Wochen davor (null, wenn keine Daten). */
   loadBefore: number | null
+  loadParts: LoadBreakdown
   plan: { planned: number; done: number; replaced: number; skipped: number; open: number; key: number; keyDone: number; plannedKm: number } | null
   /** Anteil lockerer Laufzeit (Zone 1–3), nur mit verlässlichen Zonen. */
   easyShare: number | null
@@ -80,6 +110,34 @@ export function weekReview(
 
   const load = week.reduce((s, a) => s + activityLoad(a), 0)
   const loadBefore = prior.length ? prior.reduce((s, a) => s + activityLoad(a), 0) / 4 : null
+
+  // Zugeordnet ist, was irgendein Plan-Workout als erledigt verknüpft (auch verschobene Einheiten).
+  const linked = new Map(workouts.filter((w) => w.activity_id != null).map((w) => [w.activity_id!, w]))
+  const runList: RunEntry[] = [...runs]
+    .sort((a, b) => a.start_time.localeCompare(b.start_time))
+    .map((a) => ({
+      id: a.id,
+      date: a.local_date,
+      name: linked.get(a.id)?.title ?? a.name ?? 'Lauf',
+      km: r1((a.distance_m ?? 0) / 1000),
+      durationS: a.duration_s ?? 0,
+      load: Math.round(activityLoad(a)),
+      estimated: a.training_load == null,
+      planned: linked.has(a.id),
+    }))
+  const extras = runList.filter((x) => !x.planned)
+  const groups = new Map<SportGroup, { load: number; count: number }>()
+  for (const a of week) {
+    const g = groups.get(sportGroup(a.sport)) ?? { load: 0, count: 0 }
+    groups.set(sportGroup(a.sport), { load: g.load + activityLoad(a), count: g.count + 1 })
+  }
+  const plannedLoad = week.filter((a) => linked.has(a.id)).reduce((s, a) => s + activityLoad(a), 0)
+  const loadParts: LoadBreakdown = {
+    bySport: [...groups].map(([group, g]) => ({ group, load: Math.round(g.load), count: g.count })).sort((a, b) => b.load - a.load),
+    planned: Math.round(plannedLoad),
+    extra: Math.round(load - plannedLoad),
+    estimated: week.filter((a) => a.training_load == null).length,
+  }
 
   // Plan der Woche (ohne Rennen).
   const ws = workouts.filter((w) => inRange(w.date, monday, sunday) && w.sport !== 'race')
@@ -152,10 +210,14 @@ export function weekReview(
     complete: sunday < today,
     runs: runs.length,
     runKm: r1(runs.reduce((s, a) => s + (a.distance_m ?? 0), 0) / 1000),
+    runList,
+    extraRuns: extras.length,
+    extraRunKm: r1(extras.reduce((s, x) => s + x.km, 0)),
     hours: r1(week.reduce((s, a) => s + (a.duration_s ?? 0), 0) / 3600),
     sessions: week.length,
     load: Math.round(load),
     loadBefore: loadBefore != null ? Math.round(loadBefore) : null,
+    loadParts,
     plan,
     easyShare: total > 0 && runs.length >= 2 ? easy / total : null,
     sleepH: sleep(wDays),
@@ -183,6 +245,14 @@ export function tipsFor(r: Omit<WeekReview, 'tips'>): Tip[] {
       title: 'Belastung deutlich gestiegen',
       text: `${Math.round((r.load / r.loadBefore - 1) * 100)} % mehr Trainingslast als im Schnitt der 4 Wochen davor. Große Sprünge gelten als Verletzungsrisiko, also nächste Woche nicht noch einmal steigern.`,
       source: 'Gabbett 2016 (Br J Sports Med); Impellizzeri et al. 2020 zu den Grenzen dieser Kennzahl',
+    })
+  }
+  if (r.plan && r.extraRuns > 0 && r.plan.plannedKm > 0 && r.runKm >= r.plan.plannedKm * 1.2 && r.runKm - r.plan.plannedKm >= 5) {
+    tips.push({
+      status: 'warning',
+      title: 'Mehr gelaufen als geplant',
+      text: `${de(r.runKm)} statt ${de(r.plan.plannedKm)} km, davon ${de(r.extraRunKm)} km in ${r.extraRuns} ${r.extraRuns === 1 ? 'Lauf' : 'Läufen'} außerhalb des Plans. Zusätzliche Kilometer zählen für die Belastung genauso. Halte sie locker, damit die Schlüsseleinheiten frisch gelingen.`,
+      source: 'Nielsen et al. 2014 (J Orthop Sports Phys Ther) zu schnellen Umfangssteigerungen',
     })
   }
   if (r.sleepH != null && r.sleepH < 7) {
