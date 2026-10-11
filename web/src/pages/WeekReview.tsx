@@ -1,8 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Sheet } from '../components/Sheet'
-import { Card, Pill, StatusLabel } from '../components/ui'
+import { Card, Legend, Pill, StatusLabel } from '../components/ui'
 import type { GymFocus } from '../lib/dailyLog'
-import { dateLabel, weekStart } from '../lib/format'
+import { dateLabel, duration, GROUP_LABEL, weekStart, type SportGroup } from '../lib/format'
 import { tap } from '../lib/haptics'
 import { addDays, localToday, WEEKDAY_SHORT, weekday } from '../lib/plan/dates'
 import type { PlanState } from '../lib/plan/usePlan'
@@ -12,6 +12,33 @@ import { reviewMonday, weekReview, type WeekReview } from '../lib/weekReview'
 
 const GYM_LABEL: Record<GymFocus, string> = { legs: 'Beine', upper: 'Oberkörper', full: 'Ganzkörper', core: 'Core' }
 const de = (x: number, digits = 1) => x.toLocaleString('de-DE', { maximumFractionDigits: digits })
+const SPORT_COLOR: Record<SportGroup, string> = { run: 'var(--series-1)', bike: 'var(--series-2)', swim: 'var(--series-3)', other: 'var(--series-4)' }
+const runsLabel = (n: number) => `${n} ${n === 1 ? 'Lauf' : 'Läufe'}`
+
+/** So entsteht die Zahl „Trainingslast“, Schritt für Schritt und mit Quellen. */
+const LOAD_EXPLAIN = [
+  {
+    t: '1. Jede Einheit bekommt einen Lastwert',
+    d: 'Die Uhr schätzt aus deinem Pulsverlauf, wie stark der Körper nach der Einheit nachatmen muss (EPOC, zusätzlicher Sauerstoffverbrauch nach Belastung). Dieser Wert wächst mit Dauer und noch stärker mit Intensität: 60 Minuten locker ergeben deutlich weniger als 60 Minuten mit Intervallen.',
+    s: 'Firstbeat Technologies, White Paper EPOC (2012); Borresen & Lambert 2009 (Sports Med) zur Messung von Trainingslast',
+  },
+  {
+    t: '2. Fehlt der Garmin-Wert, schätzt die App',
+    d: 'Ohne Puls liefert Garmin keinen Wert. Dann zählt die Dauer: 1,2 Punkte pro Minute für Laufen, Rad und Schwimmen, 0,6 für alles andere. Das ist grob und unterschätzt harte Einheiten.',
+    s: 'Vereinfachung in Anlehnung an session-RPE (Foster et al. 2001, J Strength Cond Res)',
+  },
+  {
+    t: '3. Die Woche ist die Summe aller Einheiten',
+    d: 'Montag bis Sonntag zählt jede aufgezeichnete Aktivität, egal ob sie im Plan stand: Zusatzläufe, Rad, Schwimmen und Krafttraining mit der Uhr. Gym-Einträge, die nur im Check-in stehen, zählen nicht, weil die Uhr dafür keinen Puls hat.',
+    s: '',
+  },
+  {
+    t: '4. Vergleich mit den 4 Wochen davor',
+    d: 'Der Schnitt der vier Wochen davor zeigt, was dein Körper gewohnt ist. Liegt eine Woche mindestens 30 % und 50 Punkte darüber, gibt es eine Warnung. Das ist ein grober Hinweis, keine exakte Vorhersage von Verletzungen.',
+    s: 'Gabbett 2016 (Br J Sports Med); Impellizzeri et al. 2020 (Int J Sports Physiol Perform) zu den Grenzen dieser Kennzahl',
+  },
+]
+
 const range = (r: WeekReview) => `${dateLabel(r.monday)} – ${dateLabel(r.sunday)}`
 
 function useReview(monday: string, data: Dataset, plan: PlanState, log: Pick<DailyLogState, 'drinks' | 'gym'>) {
@@ -39,8 +66,8 @@ function ReviewTeaser({ monday, data, plan, log }: { monday: string; data: Datas
       <button className="block w-full rounded-[22px] text-left" onClick={() => (tap(), setOpen(true))}>
         <Card title="Wochenrückblick" subtitle={range(r)} action={<span className="text-sm font-medium text-accent">Ansehen ›</span>}>
           <div className="grid grid-cols-3 gap-2">
-            <Mini label="Laufen" value={`${de(r.runKm)} km`} />
-            <Mini label="Zeit" value={`${de(r.hours)} h`} />
+            <Mini label="Laufen" value={`${de(r.runKm)} km`} hint={r.plan && r.extraRuns ? `${r.extraRuns} außer Plan` : runsLabel(r.runs)} />
+            <Mini label="Zeit" value={`${de(r.hours)} h`} hint={`Last ${r.load}`} />
             <Mini label="Plan" value={r.plan ? `${r.plan.done}/${r.plan.planned}` : '–'} />
           </div>
           {top && (
@@ -113,17 +140,16 @@ export function WeekReviewSheet({ initial, data, plan, log, onClose }: { initial
 
         <Card title="Training">
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            <Mini label="Laufen" value={`${de(r.runKm)} km`} hint={`${r.runs} ${r.runs === 1 ? 'Lauf' : 'Läufe'}`} />
+            <Mini label="Laufen" value={`${de(r.runKm)} km`} hint={r.plan && r.extraRuns ? `${runsLabel(r.runs)}, ${r.extraRuns} außerhalb des Plans` : runsLabel(r.runs)} />
             <Mini label="Gesamtzeit" value={`${de(r.hours)} h`} hint={`${r.sessions} Einheiten`} />
-            <Mini
-              label="Trainingslast"
-              value={String(r.load)}
-              hint={loadDelta != null ? `${loadDelta > 0 ? '+' : ''}${loadDelta} % ggü. Ø 4 Wochen` : undefined}
-            />
             {r.easyShare != null && <Mini label="Locker gelaufen" value={`${Math.round(r.easyShare * 100)} %`} hint="Ziel etwa 80 %" />}
           </div>
           {r.easyShare != null && <Bar parts={[{ v: r.easyShare, color: 'var(--zone-2)' }, { v: 1 - r.easyShare, color: 'var(--zone-5)' }]} />}
         </Card>
+
+        {r.runList.length > 0 && <RunsCard r={r} />}
+
+        {r.load > 0 && <LoadCard r={r} loadDelta={loadDelta} />}
 
         {r.plan && (
           <Card title="Plan" subtitle={`${r.plan.done} von ${r.plan.planned} Einheiten erledigt`}>
@@ -137,6 +163,7 @@ export function WeekReviewSheet({ initial, data, plan, log, onClose }: { initial
             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
               <Mini label="Schlüsseleinheiten" value={`${r.plan.keyDone}/${r.plan.key}`} />
               <Mini label="Kilometer" value={`${de(r.runKm)} km`} hint={r.plan.plannedKm ? `geplant ${de(r.plan.plannedKm)} km` : undefined} />
+              {r.extraRuns > 0 && <Mini label="Außerhalb des Plans" value={`${de(r.extraRunKm)} km`} hint={runsLabel(r.extraRuns)} />}
               {r.plan.skipped > 0 && <Mini label="Ausgelassen" value={String(r.plan.skipped)} />}
               {r.plan.replaced > 0 && <Mini label="Durch anderen Sport ersetzt" value={String(r.plan.replaced)} />}
               {r.plan.open > 0 && <Mini label="Noch offen" value={String(r.plan.open)} />}
@@ -191,6 +218,76 @@ export function WeekReviewSheet({ initial, data, plan, log, onClose }: { initial
         <p className="px-1 pb-2 text-xs text-ink-3">Regelbasiert aus deinen Garmin-Daten, deinem Plan und deinen Einträgen.</p>
       </div>
     </Sheet>
+  )
+}
+
+function RunsCard({ r }: { r: WeekReview }) {
+  const withPlan = r.plan != null
+  return (
+    <Card title="Alle Läufe" subtitle={withPlan ? 'Geplante und zusätzliche, alle zählen mit' : 'Jeder Lauf der Woche'}>
+      <ul className="divide-y divide-[var(--card-border)]">
+        {r.runList.map((x) => (
+          <li key={x.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+            <span className="w-6 shrink-0 text-sm font-semibold text-ink-3">{WEEKDAY_SHORT[weekday(x.date)]}</span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[15px] font-medium">{x.name}</div>
+              <div className="text-xs text-ink-3">
+                {de(x.km)} km · {duration(x.durationS)} · Last {x.load}
+                {x.estimated ? ' (geschätzt)' : ''}
+              </div>
+            </div>
+            {withPlan && (x.planned ? <Pill color="var(--good)">Plan</Pill> : <Pill color="var(--series-4)">Zusätzlich</Pill>)}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )
+}
+
+function LoadCard({ r, loadDelta }: { r: WeekReview; loadDelta: number | null }) {
+  const [why, setWhy] = useState(false)
+  const p = r.loadParts
+  const total = Math.max(1, r.load)
+  return (
+    <Card title="Belastung" subtitle="Woraus sich die Trainingslast zusammensetzt">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[28px] font-semibold tracking-tight">{r.load}</span>
+        <span className="text-sm text-ink-3">Punkte</span>
+        {loadDelta != null && (
+          <span className="ml-auto text-sm text-ink-2">
+            {loadDelta > 0 ? '+' : ''}
+            {loadDelta} % ggü. Ø {r.loadBefore}
+          </span>
+        )}
+      </div>
+      <Bar parts={p.bySport.map((x) => ({ v: x.load / total, color: SPORT_COLOR[x.group] }))} />
+      <Legend items={p.bySport.map((x) => ({ label: `${GROUP_LABEL[x.group]} ${x.load}`, color: SPORT_COLOR[x.group] }))} />
+      {r.plan && (
+        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+          <Mini label="Aus dem Plan" value={String(p.planned)} />
+          <Mini label="Außerhalb des Plans" value={String(p.extra)} />
+        </div>
+      )}
+      {p.estimated > 0 && (
+        <p className="mt-2 text-xs text-ink-3">
+          {p.estimated} {p.estimated === 1 ? 'Einheit' : 'Einheiten'} ohne Garmin-Wert, aus der Dauer geschätzt.
+        </p>
+      )}
+      <button onClick={() => (tap(), setWhy(!why))} aria-expanded={why} className="mt-3 min-h-9 text-sm font-semibold text-accent">
+        {why ? 'Weniger' : 'Wie wird die Belastung berechnet?'}
+      </button>
+      {why && (
+        <dl className="mt-1 space-y-2.5 text-sm">
+          {LOAD_EXPLAIN.map((e) => (
+            <div key={e.t}>
+              <dt className="font-semibold">{e.t}</dt>
+              <dd className="text-ink-2">{e.d}</dd>
+              {e.s && <dd className="text-xs text-ink-3">Quelle: {e.s}</dd>}
+            </div>
+          ))}
+        </dl>
+      )}
+    </Card>
   )
 }
 

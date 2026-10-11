@@ -35,6 +35,32 @@ describe('weekReview', () => {
     expect(calm[0].title).toBe('Gute Woche')
   })
 
+  it('zählt Läufe außerhalb des Plans mit und zerlegt die Last', () => {
+    const extra = [...acts, run(5, '2026-10-03', 12, { name: 'Spontan', training_load: null }), { id: 6, local_date: '2026-10-02', start_time: '2026-10-02T18:00:00Z', sport: 'cycling', distance_m: 30000, duration_s: 3600, training_load: 50 } as Activity]
+    const x = weekReview(monday, '2026-10-05', extra, days, plan, [], {}, {})
+    expect(x.runs).toBe(3)
+    expect(x.runKm).toBe(42)
+    expect(x.extraRuns).toBe(1)
+    expect(x.extraRunKm).toBe(12)
+    expect(x.runList.map((r) => [r.name, r.planned, r.estimated])).toEqual([
+      ['Lockerer Lauf', true, false],
+      ['Spontan', false, true],
+      ['Lockerer Lauf', true, false],
+    ])
+    // Läufe 100 + 200, geschätzter Lauf 12 × 330 s = 66 min × 1,2 ≈ 79, Rad 50.
+    expect(x.load).toBe(429)
+    expect(x.loadParts).toMatchObject({ planned: 300, extra: 129, estimated: 1 })
+    expect(x.loadParts.bySport).toEqual([
+      { group: 'run', load: 379, count: 3 },
+      { group: 'bike', load: 50, count: 1 },
+    ])
+  })
+
+  it('warnt, wenn Zusatzläufe den Plan deutlich übertreffen', () => {
+    const t = tipsFor({ ...r, load: 40, sleepH: 8, drinks: 0, drinkDays: 0, runKm: 60, extraRuns: 2, extraRunKm: 25, plan: { ...r.plan!, plannedKm: 40, skipped: 0 } })
+    expect(t[0].title).toBe('Mehr gelaufen als geplant')
+  })
+
   it('zeigt den Rückblick Sonntag ab Mittag und Montag', () => {
     expect(reviewMonday('2026-10-04', 13)).toBe('2026-09-28')
     expect(reviewMonday('2026-10-04', 9)).toBeNull()
