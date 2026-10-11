@@ -1,4 +1,4 @@
-import { Card, Ring, Section, SportIcon, Stat, StatusLabel, type Status } from '../components/ui'
+import { Card, Section, SportIcon, Stat, StatusLabel } from '../components/ui'
 import { RecordsCard, WeekCard } from './TodayTraining'
 import { ZoneBar } from '../components/ZoneBar'
 import { hrvState, restingHrDelta, weeklyTotals } from '../lib/derive'
@@ -6,29 +6,13 @@ import { dateLabel, duration, hoursMin, km, speed, sportGroup, sportLabel } from
 import type { Dataset } from '../lib/types'
 import { localToday } from '../lib/plan/dates'
 import type { PlanState } from '../lib/plan/usePlan'
-import type { PlanWorkout } from '../lib/plan/types'
-import { tap } from '../lib/haptics'
-import { toast } from '../lib/toast'
-import { workoutAmount } from '../lib/plan/labels'
-import { explain } from '../lib/plan/explain'
 import { useMemo } from 'react'
 import { readinessFor } from '../lib/readiness'
 import type { DailyLogState } from '../lib/useDailyLog'
-import { ProposalCard, ReadinessCard } from './TodayReadiness'
 import { CheckInCard } from './CheckIn'
-import { FeedbackCard } from './PlanFeedback'
-import { MobilityCard } from './Mobility'
-import { GymCard, StrengthCard } from './Strength'
-import { HeatCard } from './Heat'
-import { WeekReviewCard } from './WeekReview'
-import { OverloadCard } from './Overload'
-
-function garminStatus(score: number): { status: Status; text: string } {
-  if (score >= 75) return { status: 'good', text: 'Bereit für Belastung' }
-  if (score >= 50) return { status: 'warning', text: 'Moderat trainieren' }
-  if (score >= 25) return { status: 'serious', text: 'Eher locker' }
-  return { status: 'critical', text: 'Erholung' }
-}
+import { GymCard } from './Strength'
+import { TodayHero } from './TodayHero'
+import { TodayTasks } from './TodayTasks'
 
 export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: Dataset; plan: PlanState; log: DailyLogState; onOpenActivity: (id: number) => void; onOpenPlan: () => void }) {
   const today = localToday()
@@ -39,7 +23,7 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
   const rhrDelta = restingHrDelta(data.days)
   const week = weeklyTotals(data.activities, 0).at(-1)
   const latest = data.activities[0]
-  const readiness = day?.training_readiness
+  const strengthToday = data.activities.some((a) => a.local_date === today && /strength|fitness_equipment/.test(a.sport))
 
   const sleepParts = lastNight
     ? [
@@ -56,33 +40,10 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
 
   return (
     <div className="page-in desk-cols space-y-3">
-      {own && <ReadinessCard r={own} garmin={readiness} />}
-      <OverloadCard days={data.days} activities={data.activities} workouts={plan.workouts} today={today} />
-      <ProposalCard plan={plan} r={own} today={today} log={log} />
-      <PlannedToday plan={plan} onOpenPlan={onOpenPlan} />
-      <HeatCard workout={plan.workouts.find((w) => w.date === today && w.sport === 'run' && w.status === 'planned')} />
-      <FeedbackCard plan={plan} today={today} activities={data.activities} />
-      <MobilityCard activities={data.activities} today={today} />
-      <StrengthCard workouts={plan.workouts} log={log} today={today} readiness={own} />
-      <WeekReviewCard data={data} plan={plan} log={log} />
-      {!own && readiness != null && (
-        <Card className="p-5">
-          <div className="flex items-center gap-5">
-            <Ring value={readiness} size={96} stroke={9} label={`Garmin Readiness ${readiness} von 100`}>
-              <span className="text-[28px] leading-none font-bold">{readiness}</span>
-            </Ring>
-            <div>
-              <div className="text-xs font-medium text-ink-3">Training Readiness (Garmin)</div>
-              <div className="mt-1 text-lg font-semibold">
-                <StatusLabel status={garminStatus(readiness).status}>{garminStatus(readiness).text}</StatusLabel>
-              </div>
-              <div className="mt-1 text-xs text-ink-3">Deine eigene Readiness erscheint, sobald Schlaf oder HRV von heute da sind.</div>
-            </div>
-          </div>
-        </Card>
-      )}
+      <TodayHero data={data} plan={plan} log={log} own={own} today={today} strengthToday={strengthToday} onOpenPlan={onOpenPlan} className="span-all" />
+      <TodayTasks data={data} plan={plan} log={log} own={own} today={today} strengthToday={strengthToday} />
 
-      <Section title="Körper">
+      <Section title="Körper" action={<CheckInCard log={log} plan={plan} today={today} strengthToday={strengthToday} variant="link" />}>
         <div className="grid grid-cols-2 gap-3">
           <Stat
             label="Schlaf"
@@ -137,12 +98,8 @@ export function Today({ data, plan, log, onOpenActivity, onOpenPlan }: { data: D
         )}
       </Section>
 
-      <Section title="Eintragen">
-        <CheckInCard log={log} plan={plan} today={today} strengthToday={data.activities.some((a) => a.local_date === today && /strength|fitness_equipment/.test(a.sport))} />
-        <GymCard workouts={plan.workouts} log={log} today={today} />
-      </Section>
-
       <Section title="Training">
+        <GymCard workouts={plan.workouts} log={log} today={today} />
         {week && <WeekCard activities={data.activities} monday={week.week} km={week.km} hours={week.run + week.bike + week.swim + week.other} />}
         <RecordsCard records={data.records ?? []} activities={data.activities} onOpen={onOpenActivity} />
         {latest && (
@@ -180,57 +137,5 @@ function Mini({ label, value }: { label: string; value: string }) {
       <div className="text-xs text-ink-3">{label}</div>
       <div className="mt-0.5 text-[15px] font-semibold">{value}</div>
     </div>
-  )
-}
-
-function PlannedToday({ plan, onOpenPlan }: { plan: PlanState; onOpenPlan: () => void }) {
-  const today = localToday()
-  const ws = plan.workouts.filter((w) => w.date === today && w.status !== 'skipped')
-  if (!plan.events.some((e) => e.date >= today)) return null
-  const race = (id: string) => plan.events.find((e) => e.id === id)?.name
-  async function toggle(w: PlanWorkout) {
-    const done = w.status !== 'done'
-    tap()
-    try {
-      await plan.setStatus(w, done ? 'done' : 'planned')
-      if (done) toast(`${w.title} erledigt. Stark!`)
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    }
-  }
-  return (
-    <Card title="Heute geplant">
-      {ws.length === 0 ? (
-        <button onClick={onOpenPlan} className="press-row -mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between rounded-lg px-2 text-left text-sm text-ink-2">
-          Ruhetag. Erholung gehört zum Plan.
-          <span className="text-accent">Plan ›</span>
-        </button>
-      ) : (
-        <ul className="-my-1">
-          {ws.map((w) => (
-            <li key={w.id} className="flex items-center">
-              <button onClick={onOpenPlan} className="press-row -ml-2 flex min-h-14 min-w-0 flex-1 flex-col justify-center rounded-lg pl-2 text-left">
-                <span className={`truncate text-[17px] font-semibold ${w.status === 'done' ? 'text-ink-3 line-through' : ''}`}>{w.title}</span>
-                <span className="text-xs text-ink-3">
-                  {workoutAmount(w)}
-                  {plan.events.length > 1 && ` · ${race(w.event_id)}`}
-                </span>
-                {explain(w) && <span className="mt-0.5 text-xs text-ink-2">{explain(w)!.short}</span>}
-              </button>
-              {w.sport !== 'race' && (
-                <button
-                  onClick={() => toggle(w)}
-                  aria-pressed={w.status === 'done'}
-                  className={`ml-2 min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold ${w.status === 'done' ? 'text-white' : 'bg-surface-2 text-ink'}`}
-                  style={w.status === 'done' ? { background: 'var(--good)' } : undefined}
-                >
-                  {w.status === 'done' ? '✓ Erledigt' : 'Erledigt?'}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
   )
 }

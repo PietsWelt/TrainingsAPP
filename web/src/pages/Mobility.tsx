@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Sheet } from '../components/Sheet'
-import { Card, Pill, Segmented } from '../components/ui'
+import { Card, Pill, Segmented, TaskRow, type CardVariant } from '../components/ui'
 import { tap } from '../lib/haptics'
 import { BEGINNER_TIPS, buildRoutine, DOSE, EVIDENCE, LEVELS, routineKind, type Level, type RoutineKind } from '../lib/mobility'
 import { toast } from '../lib/toast'
@@ -11,15 +11,47 @@ const TYPE_LABEL = { roll: 'Rolle', stretch: 'Dehnen', mobility: 'Mobilität' } 
 const TYPE_COLOR = { roll: 'var(--series-2)', stretch: 'var(--accent)', mobility: 'var(--series-3)' } as const
 
 /** Auf „Heute“: Nach jedem Training die passende Routine vorschlagen. */
-export function MobilityCard({ activities, today }: { activities: Activity[]; today: string }) {
+/** Training von heute, nach dem eine Routine passt, und ob sie schon erledigt ist (null = heute keine). */
+export function mobilityToday(activities: Activity[], today: string, done: number[]): { a: Activity; kind: RoutineKind; isDone: boolean } | null {
+  const a = activities.find((x) => x.local_date === today && routineKind(x))
+  return a ? { a, kind: routineKind(a)!, isDone: done.includes(a.id) } : null
+}
+
+export function MobilityCard({ activities, today, variant = 'card' }: { activities: Activity[]; today: string; variant?: CardVariant }) {
   const done = useAppState<number[]>('mobility.done', [])
   const [open, setOpen] = useState(false)
   const level = useAppState<Level>('mobility.level', 'easy')
-  const a = activities.find((x) => x.local_date === today && routineKind(x))
-  if (!a) return null
-  const kind = routineKind(a)!
+  const m = mobilityToday(activities, today, done)
+  if (!m) return null
+  const { a, kind, isDone } = m
   const r = buildRoutine(kind, level)
-  const isDone = done.includes(a.id)
+  const sheet = open && (
+    <MobilitySheet
+      kind={kind}
+      done={isDone}
+      onClose={() => setOpen(false)}
+      onDone={() => {
+        const next = [a.id, ...done.filter((x) => x !== a.id)].slice(0, 60)
+        void setState('mobility.done', next)
+        setOpen(false)
+      }}
+    />
+  )
+
+  if (variant === 'row')
+    return (
+      <>
+        <TaskRow
+          icon="↻"
+          color="var(--series-2)"
+          done={isDone}
+          title={isDone ? 'Dehnen erledigt' : 'Dehnen & Faszienrolle'}
+          subtitle={`${r.title} · ${LEVELS.find((l) => l.value === level)?.label} · ${r.minutes} min`}
+          onClick={() => (tap(), setOpen(true))}
+        />
+        {sheet}
+      </>
+    )
 
   return (
     <>
@@ -43,18 +75,7 @@ export function MobilityCard({ activities, today }: { activities: Activity[]; to
           </button>
         </div>
       </Card>
-      {open && (
-        <MobilitySheet
-          kind={kind}
-          done={isDone}
-          onClose={() => setOpen(false)}
-          onDone={() => {
-            const next = [a.id, ...done.filter((x) => x !== a.id)].slice(0, 60)
-            void setState('mobility.done', next)
-            setOpen(false)
-          }}
-        />
-      )}
+      {sheet}
     </>
   )
 }

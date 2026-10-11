@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Sheet } from '../components/Sheet'
-import { Card, Pill, Segmented } from '../components/ui'
+import { Card, Pill, Segmented, TaskRow, type CardVariant } from '../components/ui'
 import { GymHistorySheet } from './GymHistory'
 import type { GymByDate } from '../lib/dailyLog'
 import { tap } from '../lib/haptics'
@@ -59,16 +59,24 @@ function writeStore(key: string, value: unknown) {
 const nextUpper = (): UpperVariant => (getState<UpperVariant>('gym.upper.last', 'B') === 'A' ? 'B' : 'A')
 
 /** Auf „Heute“: der Kraft- oder Stabi-Vorschlag für heute, falls einer ansteht. */
-export function StrengthCard({ workouts, log, today, readiness }: { workouts: PlanWorkout[]; log: DailyLogState; today: string; readiness?: Readiness | null }) {
+/** Welcher Kraft-Vorschlag heute ansteht und ob er erledigt ist (null = heute keiner). */
+export function strengthToday(workouts: PlanWorkout[], gym: DailyLogState['gym'], today: string, skip: string[]): { which: Which; done: boolean; week: WeekStrength } | null {
+  const s = weekStrength(mondayOf(today), workouts, gym, today, skip)
+  const which: Which | null = s.legs === today ? 'legs' : s.upper.includes(today) ? 'upper' : s.stabi.includes(today) ? 'stabi' : null
+  if (!which) return null
+  const done = which === 'legs' ? s.legsDone === today : which === 'upper' ? s.upperDone.includes(today) : s.stabiDone.includes(today)
+  return { which, done, week: s }
+}
+
+export function StrengthCard({ workouts, log, today, readiness, variant = 'card' }: { workouts: PlanWorkout[]; log: DailyLogState; today: string; readiness?: Readiness | null; variant?: CardVariant }) {
   const [open, setOpen] = useState<Which | null>(null)
   const [anyway, setAnyway] = useState(false)
   const level = useAppState<StabiLevel>('stabi.level', 'easy')
   const upperNext = useAppState<UpperVariant>('gym.upper.last', 'B') === 'A' ? 'B' : 'A'
   const skip = useAppState<string[]>('strength.skip', [])
-  const s = weekStrength(mondayOf(today), workouts, log.gym, today, skip)
-  const which: Which | null = s.legs === today ? 'legs' : s.upper.includes(today) ? 'upper' : s.stabi.includes(today) ? 'stabi' : null
-  if (!which) return null
-  const done = which === 'legs' ? s.legsDone === today : which === 'upper' ? s.upperDone.includes(today) : s.stabiDone.includes(today)
+  const st = strengthToday(workouts, log.gym, today, skip)
+  if (!st) return null
+  const { which, done, week: s } = st
   const legs = legSession(s.phase)
   const upper = upperSession(upperNext, s.phase)
   const title = which === 'legs' ? legs.title : which === 'upper' ? upper.title : 'Stabi für Läufer'
@@ -76,6 +84,45 @@ export function StrengthCard({ workouts, log, today, readiness }: { workouts: Pl
   const doneLabel = which === 'legs' ? 'Beintraining' : which === 'upper' ? 'Oberkörper' : 'Stabi'
   // Bei niedriger Readiness lieber verschieben (Beine) oder heute ganz auf Kraft verzichten.
   const advice = done || anyway ? ({ action: 'ok' } as const) : strengthAdvice(which, readiness)
+
+  const postpone = () => {
+    tap()
+    void addToList('strength.skip', `${today}:${which}`)
+    toast(which === 'legs' ? 'Beintag verschoben.' : 'Oberkörper verschoben.')
+  }
+  const sheet = open && <StrengthSheet which={open} week={s} done={open === which && done} today={today} log={log} onClose={() => setOpen(null)} />
+
+  if (variant === 'row')
+    return (
+      <>
+        <TaskRow
+          icon={which === 'stabi' ? '◎' : <DumbbellIcon />}
+          color={advice.action === 'ok' ? 'var(--series-4)' : 'var(--serious)'}
+          done={done}
+          title={done ? `${doneLabel} erledigt` : title}
+          subtitle={advice.action === 'ok' ? `${which === 'stabi' ? 'Zuhause, ohne Geräte' : 'Gym'} · etwa ${minutes} min${which === 'legs' && s.legsAfterKey && !done ? ' · nach dem Lauf, mit Abstand' : ''}` : advice.text}
+          onClick={() => (tap(), setOpen(which))}
+        >
+          {advice.action !== 'ok' && (
+            <div className="grid grid-cols-2 gap-2 pt-1 pb-1 pl-12">
+              <button onClick={postpone} className="min-h-10 rounded-xl btn-primary text-sm font-semibold">
+                Verschieben
+              </button>
+              {advice.action === 'move' ? (
+                <button onClick={() => setOpen('stabi')} className="min-h-10 rounded-xl bg-surface-2 text-sm font-semibold">
+                  Stabi stattdessen
+                </button>
+              ) : (
+                <button onClick={() => (setAnyway(true), setOpen(which))} className="min-h-10 rounded-xl bg-surface-2 text-sm font-semibold">
+                  Trotzdem starten
+                </button>
+              )}
+            </div>
+          )}
+        </TaskRow>
+        {sheet}
+      </>
+    )
 
   if (advice.action !== 'ok')
     return (
@@ -91,14 +138,7 @@ export function StrengthCard({ workouts, log, today, readiness }: { workouts: Pl
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              onClick={() => {
-                tap()
-                void addToList('strength.skip', `${today}:${which}`)
-                toast(which === 'legs' ? 'Beintag verschoben.' : 'Oberkörper verschoben.')
-              }}
-              className="min-h-11 rounded-xl btn-primary text-[15px] font-semibold"
-            >
+            <button onClick={postpone} className="min-h-11 rounded-xl btn-primary text-[15px] font-semibold">
               Verschieben
             </button>
             <button onClick={() => setAnyway(true)} className="min-h-11 rounded-xl bg-surface-2 text-[15px] font-semibold">
@@ -111,7 +151,7 @@ export function StrengthCard({ workouts, log, today, readiness }: { workouts: Pl
             </button>
           )}
         </Card>
-        {open && <StrengthSheet which={open} week={s} done={false} today={today} log={log} onClose={() => setOpen(null)} />}
+        {sheet}
       </>
     )
 

@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Sheet } from '../components/Sheet'
-import { Card, Legend, Pill, StatusLabel } from '../components/ui'
+import { Card, Legend, Pill, StatusLabel, TaskRow, type CardVariant } from '../components/ui'
 import type { GymFocus } from '../lib/dailyLog'
 import { dateLabel, duration, GROUP_LABEL, weekStart, type SportGroup } from '../lib/format'
 import { tap } from '../lib/haptics'
@@ -50,17 +50,30 @@ function useReview(monday: string, data: Dataset, plan: PlanState, log: Pick<Dai
 }
 
 /** Karte auf „Heute“ am Sonntagnachmittag und Montag. */
-export function WeekReviewCard({ data, plan, log }: { data: Dataset; plan: PlanState; log: DailyLogState }) {
+export function WeekReviewCard({ data, plan, log, variant = 'card' }: { data: Dataset; plan: PlanState; log: DailyLogState; variant?: CardVariant }) {
   const [hour] = useState(() => new Date().getHours())
   const monday = reviewMonday(localToday(), hour)
   if (!monday) return null
-  return <ReviewTeaser monday={monday} data={data} plan={plan} log={log} />
+  return <ReviewTeaser monday={monday} data={data} plan={plan} log={log} row={variant === 'row'} />
 }
 
-function ReviewTeaser({ monday, data, plan, log }: { monday: string; data: Dataset; plan: PlanState; log: DailyLogState }) {
+function ReviewTeaser({ monday, data, plan, log, row }: { monday: string; data: Dataset; plan: PlanState; log: DailyLogState; row: boolean }) {
   const [open, setOpen] = useState(false)
   const r = useReview(monday, data, plan, log)
   const top = r.tips[0]
+  if (row)
+    return (
+      <>
+        <TaskRow
+          icon="▤"
+          color="var(--accent)"
+          title="Wochenrückblick"
+          subtitle={`${range(r)} · ${de(r.runKm)} km${r.plan ? ` · Plan ${r.plan.done}/${r.plan.planned}` : ''}${top ? ` · ${top.title}` : ''}`}
+          onClick={() => (tap(), setOpen(true))}
+        />
+        {open && <WeekReviewSheet initial={monday} data={data} plan={plan} log={log} onClose={() => setOpen(false)} />}
+      </>
+    )
   return (
     <>
       <button className="block w-full rounded-[22px] text-left" onClick={() => (tap(), setOpen(true))}>
