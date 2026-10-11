@@ -24,9 +24,11 @@ import {
   type StabiLevel,
   type UpperVariant,
   type WeekStrength,
+  strengthAdvice,
 } from '../lib/strength'
 import { cachedGymSets, fmtSets, lastSets, loadGymSets, parseNum, progression, repRange, saveGymSession, type GymSession, type GymSet } from '../lib/gymSets'
-import { getState, setState, useAppState } from '../lib/appState'
+import { addToList, getState, setState, useAppState } from '../lib/appState'
+import type { Readiness } from '../lib/readiness'
 import { toast } from '../lib/toast'
 import type { DailyLogState } from '../lib/useDailyLog'
 
@@ -57,11 +59,13 @@ function writeStore(key: string, value: unknown) {
 const nextUpper = (): UpperVariant => (getState<UpperVariant>('gym.upper.last', 'B') === 'A' ? 'B' : 'A')
 
 /** Auf „Heute“: der Kraft- oder Stabi-Vorschlag für heute, falls einer ansteht. */
-export function StrengthCard({ workouts, log, today }: { workouts: PlanWorkout[]; log: DailyLogState; today: string }) {
+export function StrengthCard({ workouts, log, today, readiness }: { workouts: PlanWorkout[]; log: DailyLogState; today: string; readiness?: Readiness | null }) {
   const [open, setOpen] = useState<Which | null>(null)
+  const [anyway, setAnyway] = useState(false)
   const level = useAppState<StabiLevel>('stabi.level', 'easy')
   const upperNext = useAppState<UpperVariant>('gym.upper.last', 'B') === 'A' ? 'B' : 'A'
-  const s = weekStrength(mondayOf(today), workouts, log.gym, today)
+  const skip = useAppState<string[]>('strength.skip', [])
+  const s = weekStrength(mondayOf(today), workouts, log.gym, today, skip)
   const which: Which | null = s.legs === today ? 'legs' : s.upper.includes(today) ? 'upper' : s.stabi.includes(today) ? 'stabi' : null
   if (!which) return null
   const done = which === 'legs' ? s.legsDone === today : which === 'upper' ? s.upperDone.includes(today) : s.stabiDone.includes(today)
@@ -70,6 +74,46 @@ export function StrengthCard({ workouts, log, today }: { workouts: PlanWorkout[]
   const title = which === 'legs' ? legs.title : which === 'upper' ? upper.title : 'Stabi für Läufer'
   const minutes = which === 'legs' ? legs.minutes : which === 'upper' ? upper.minutes : stabiSession(level).minutes
   const doneLabel = which === 'legs' ? 'Beintraining' : which === 'upper' ? 'Oberkörper' : 'Stabi'
+  // Bei niedriger Readiness lieber verschieben (Beine) oder heute ganz auf Kraft verzichten.
+  const advice = done || anyway ? ({ action: 'ok' } as const) : strengthAdvice(which, readiness)
+
+  if (advice.action !== 'ok')
+    return (
+      <>
+        <Card>
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ background: 'var(--serious)' }} aria-hidden>
+              <DumbbellIcon />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[15px] font-semibold">{title}</div>
+              <div className="text-xs text-ink-2">{advice.text}</div>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                tap()
+                void addToList('strength.skip', `${today}:${which}`)
+                toast(which === 'legs' ? 'Beintag verschoben.' : 'Oberkörper verschoben.')
+              }}
+              className="min-h-11 rounded-xl btn-primary text-[15px] font-semibold"
+            >
+              Verschieben
+            </button>
+            <button onClick={() => setAnyway(true)} className="min-h-11 rounded-xl bg-surface-2 text-[15px] font-semibold">
+              Trotzdem starten
+            </button>
+          </div>
+          {advice.action === 'move' && (
+            <button onClick={() => setOpen('stabi')} className="mt-2 min-h-10 w-full text-sm font-medium text-accent">
+              Stattdessen Stabi zuhause
+            </button>
+          )}
+        </Card>
+        {open && <StrengthSheet which={open} week={s} done={false} today={today} log={log} onClose={() => setOpen(null)} />}
+      </>
+    )
 
   return (
     <>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PlanWorkout } from './plan/types'
-import { legSession, mergeFocus, setsOf, stabiSession, upperSession, weekStrength } from './strength'
+import { legSession, mergeFocus, setsOf, stabiSession, strengthAdvice, upperSession, weekStrength } from './strength'
 
 // Woche ab Montag, 5. Oktober 2026.
 const MON = '2026-10-05'
@@ -97,5 +97,33 @@ describe('Oberkörper', () => {
     expect(mergeFocus('core', 'legs')).toBe('legs')
     expect(mergeFocus(undefined, 'upper')).toBe('upper')
     expect(mergeFocus('upper', 'upper')).toBe('upper')
+  })
+})
+
+describe('strengthAdvice', () => {
+  const r = (score: number, status: 'good' | 'warning' | 'serious' | 'critical') => ({ score, status })
+  it('rät bei „Erholung“ von jeder Kraft ab, nur Stabi bleibt', () => {
+    expect(strengthAdvice('legs', r(25, 'critical')).action).toBe('rest')
+    expect(strengthAdvice('upper', r(25, 'critical')).action).toBe('rest')
+    expect(strengthAdvice('stabi', r(25, 'critical')).action).toBe('ok')
+  })
+  it('verschiebt Beine bei „Eher locker“, Oberkörper geht', () => {
+    const a = strengthAdvice('legs', r(40, 'serious'))
+    expect(a.action).toBe('move')
+    expect(a.action !== 'ok' && a.text).toContain('Readiness 40')
+    expect(strengthAdvice('upper', r(40, 'serious')).action).toBe('ok')
+  })
+  it('ändert ab „Moderat“ nichts', () => {
+    expect(strengthAdvice('legs', r(55, 'warning')).action).toBe('ok')
+    expect(strengthAdvice('legs', null).action).toBe('ok')
+  })
+  it('legt einen verschobenen Beintag auf einen passenden späteren Tag', () => {
+    const before = weekStrength(MON, week, {}, day(2), [])
+    expect(before.legs).toBe(day(2))
+    const after = weekStrength(MON, week, {}, day(2), [`${day(2)}:legs`])
+    expect(after.legs).not.toBe(day(2))
+    expect(after.legs! > day(2)).toBe(true)
+    // Nicht direkt vor dem langen Lauf am Sonntag.
+    expect(after.legs).not.toBe(day(5))
   })
 })

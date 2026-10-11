@@ -2,6 +2,7 @@
 // schlechter Tag nicht. Der Plan schraubt dann von selbst zurück, statt auf eine Verletzung zu warten.
 // Die Readiness schaut auf heute; diese Prüfung schaut auf die letzten 7 Tage.
 
+import { formOn, formPct } from '../fitness'
 import { loadOf } from '../readiness'
 import type { Activity, DailyMetrics } from '../types'
 import { scaleWorkout, snapshot } from './adapt'
@@ -38,10 +39,13 @@ const nums = (xs: (number | null | undefined)[]) => xs.filter((x): x is number =
  * Prüft die letzten 7 Tage gegen deine eigene Norm:
  * - HRV: Wochenschnitt unter deinem Normalbereich (Garmins HRV-Status, sonst 1 Standardabweichung unter dem Schnitt).
  * - Ruhepuls: Wochenschnitt mindestens 5 Schläge über deinem Schnitt.
- * - Trainingslast: letzte 7 Tage mehr als das 1,5-Fache deines 4-Wochen-Schnitts.
+ * - Trainingslast: Form unter −30 % der Fitness (dieselbe Rechnung wie Readiness und Trends).
  * - Schlaf: die meisten Nächte der Woche unter 6 h oder über 1 h kürzer als sonst (Median, 1–2 kurze Nächte zählen nicht).
  * - Gefühl: mindestens 2 Einheiten in 10 Tagen als „zu hart“ bewertet.
  */
+/** Ab dieser Form (in % der Fitness) ist die Trainingslast ein Warnzeichen. */
+export const OVERLOAD_FORM_PCT = -30
+
 export function overloadCheck(days: DailyMetrics[], activities: Activity[], workouts: PlanWorkout[], today: string): OverloadCheck {
   const signals: OverloadSignal[] = []
   const week = days.filter((d) => d.date > addDays(today, -7) && d.date <= today)
@@ -71,9 +75,15 @@ export function overloadCheck(days: DailyMetrics[], activities: Activity[], work
   // Trainingslast
   const recent = activities.filter((a) => a.local_date <= today && a.local_date > addDays(today, -28))
   if (recent.length >= 6) {
-    const acute = recent.filter((a) => a.local_date > addDays(today, -7)).reduce((s, a) => s + loadOf(a), 0)
-    const chronic = recent.reduce((s, a) => s + loadOf(a), 0) / 4
-    if (chronic > 0 && acute / chronic > 1.5) signals.push({ key: 'load', label: 'Trainingslast', detail: `Letzte 7 Tage ${Math.round((acute / chronic) * 100)} % deines Wochenschnitts.` })
+    // Form nach dem heutigen Training. Ohne eingeschwungene Fitness wie bisher: 7 gegen 28 Tage.
+    const pct = formPct(formOn(activities, addDays(today, 1)))
+    if (pct != null) {
+      if (pct < OVERLOAD_FORM_PCT) signals.push({ key: 'load', label: 'Trainingslast', detail: `Form −${Math.abs(pct)} %: Die Ermüdung liegt weit über deiner Fitness.` })
+    } else {
+      const acute = recent.filter((a) => a.local_date > addDays(today, -7)).reduce((s, a) => s + loadOf(a), 0)
+      const chronic = recent.reduce((s, a) => s + loadOf(a), 0) / 4
+      if (chronic > 0 && acute / chronic > 1.5) signals.push({ key: 'load', label: 'Trainingslast', detail: `Letzte 7 Tage ${Math.round((acute / chronic) * 100)} % deines Wochenschnitts.` })
+    }
   }
 
   // Schlaf: Median statt Schnitt, damit 1–2 kurze Nächte (z. B. nach dem Feiern) nicht zählen.

@@ -17,6 +17,7 @@ export const SHARED_KEYS = [
   'readiness.dismissed',
   'checkin.done',
   'garmin.races.handled',
+  'strength.skip',
 ] as const
 export type SharedKey = (typeof SHARED_KEYS)[number]
 
@@ -199,6 +200,7 @@ export function createAppState(backend: Backend | null, storage: KeyValueStorage
 const LISTS: Partial<Record<SharedKey, number>> = {
   'plan.released': 50,
   'garmin.races.handled': 200,
+  'strength.skip': 30,
 }
 
 export const appState = createAppState(supabaseBackend(), browserStorage())
