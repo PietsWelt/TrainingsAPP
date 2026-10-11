@@ -12,7 +12,7 @@ import type { GymByDate } from '../lib/dailyLog'
 import { WeekStrengthLine } from './Strength'
 import { fmtDuration, fmtPace, raceDistanceKm } from '../lib/plan/generate'
 import type { PlanState } from '../lib/plan/usePlan'
-import { stepLines, workoutAmount } from '../lib/plan/labels'
+import { HARD_KINDS, kindChip, plannedIntensity, stepLines, weekKinds, workoutAmount } from '../lib/plan/labels'
 import { AnalysisBlock, FeedbackChips } from './PlanFeedback'
 import { analysisFor } from '../lib/plan/analyze'
 import { replacedBy } from '../lib/plan/catchup'
@@ -275,8 +275,15 @@ function WeekList({ workouts, all, gym, today, activities, onOpen, onToggle }: {
     return [...m.entries()]
   }, [workouts])
   const thisMonday = mondayOf(today)
+  const nextMonday = addDays(thisMonday, 7)
   const past = weeks.filter(([m]) => m < thisMonday)
   const rest = weeks.filter(([m]) => m >= thisMonday)
+  // Diese und nächste Woche sind offen, spätere Wochen zeigen nur eine Zeile (2.4).
+  const [opened, setOpened] = useState<Set<string>>(() => new Set())
+  const [allOpen, setAllOpen] = useState(false)
+  const isOpen = (m: string) => allOpen || m <= nextMonday || opened.has(m)
+  const collapsed = rest.filter(([m]) => !isOpen(m)).length
+  const firstClosed = groups(showPast ? weeks : rest, isOpen).findIndex((g) => !g.open)
 
   return (
     <div className="space-y-3">
@@ -285,10 +292,94 @@ function WeekList({ workouts, all, gym, today, activities, onOpen, onToggle }: {
           {showPast ? 'Vergangene Wochen ausblenden' : `${past.length} vergangene ${past.length === 1 ? 'Woche' : 'Wochen'} anzeigen`}
         </button>
       )}
-      {(showPast ? weeks : rest).map(([monday, ws]) => (
-        <Week key={monday} monday={monday} workouts={ws} all={all} gym={gym} today={today} activities={activities} onOpen={onOpen} onToggle={onToggle} />
-      ))}
+      {groups(showPast ? weeks : rest, isOpen).map((g, gi) =>
+        g.open ? (
+          g.weeks.map(([monday, ws]) => <Week key={monday} monday={monday} workouts={ws} all={all} gym={gym} today={today} activities={activities} onOpen={onOpen} onToggle={onToggle} />)
+        ) : (
+          <section key={g.weeks[0][0]} aria-label="Spätere Wochen">
+            {gi === firstClosed && (
+              <div className="flex items-center justify-between px-1 pb-1">
+                <span className="text-xs font-medium text-ink-3">Spätere Wochen</span>
+                <button onClick={() => (tap(), setAllOpen(true))} className="min-h-10 text-sm font-medium text-accent">
+                  Alle aufklappen
+                </button>
+              </div>
+            )}
+            <Card className="overflow-hidden p-0">
+              <ul className="divide-y divide-line">
+                {g.weeks.map(([monday, ws]) => (
+                  <li key={monday}>
+                    <WeekSummary monday={monday} workouts={ws} onOpen={() => (tap(), setOpened(new Set(opened).add(monday)))} />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </section>
+        ),
+      )}
+      {allOpen && collapsed === 0 && rest.length > 2 && (
+        <button onClick={() => (setAllOpen(false), setOpened(new Set()))} className="w-full rounded-xl py-2 text-sm font-medium text-accent">
+          Spätere Wochen einklappen
+        </button>
+      )}
     </div>
+  )
+}
+
+type WeekEntry = [string, PlanWorkout[]]
+/** Fasst aufeinanderfolgende offene bzw. eingeklappte Wochen zusammen, damit Eingeklapptes eine Karte bildet. */
+function groups(weeks: WeekEntry[], isOpen: (m: string) => boolean): { open: boolean; weeks: WeekEntry[] }[] {
+  const out: { open: boolean; weeks: WeekEntry[] }[] = []
+  for (const w of weeks) {
+    const open = isOpen(w[0])
+    if (out.at(-1)?.open === open) out.at(-1)!.weeks.push(w)
+    else out.push({ open, weeks: [w] })
+  }
+  return out
+}
+
+/** Eine eingeklappte Woche als Zeile: „Woche 9 · Aufbau · 48 km · Schwelle, Intervalle, Lang 18 km“. */
+function WeekSummary({ monday, workouts, onOpen }: { monday: string; workouts: PlanWorkout[]; onOpen: () => void }) {
+  const w0 = workouts[0]
+  const runKm = workouts.filter((w) => w.sport === 'run').reduce((a, w) => a + (w.distance_km ?? 0), 0)
+  const mins = workouts.filter((w) => w.sport !== 'race').reduce((a, w) => a + (w.duration_min ?? 0), 0)
+  const kinds = weekKinds(workouts)
+  const race = workouts.find((w) => w.sport === 'race')
+  const { easyPct } = plannedIntensity(workouts)
+  return (
+    <button
+      onClick={onOpen}
+      aria-expanded={false}
+      aria-label={`Woche ${w0.week_index} aufklappen`}
+      className="press-row flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold">
+          Woche {w0.week_index} <span className="font-normal text-ink-3">· {PHASE_LABEL[w0.phase]}{runKm > 0 ? ` · ${Math.round(runKm)} km` : mins > 0 ? ` · ${(mins / 60).toFixed(1).replace('.', ',')} h` : ''}</span>
+        </span>
+        <span className="block truncate text-xs text-ink-2">
+          {dateLabel(monday)} · {race ? race.title : kinds || 'Ruhig'}
+        </span>
+      </span>
+      {easyPct != null && <IntensityBar pct={easyPct} compact />}
+      <span className="text-ink-3" aria-hidden>
+        ›
+      </span>
+    </button>
+  )
+}
+
+/** Dünner Balken locker/hart mit „84 % locker“. */
+function IntensityBar({ pct, compact = false }: { pct: number; compact?: boolean }) {
+  return (
+    <span className={`flex shrink-0 items-center gap-2 ${compact ? 'w-14' : 'w-full'}`} title={`${pct} % locker, ${100 - pct} % hart`}>
+      <span className="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full" aria-hidden>
+        <span style={{ width: `${pct}%`, background: 'var(--c-lock)' }} />
+        <span style={{ width: `${100 - pct}%`, background: 'var(--c-hart)' }} />
+      </span>
+      {!compact && <span className="shrink-0 text-xs text-ink-2">{pct} % locker</span>}
+      {compact && <span className="sr-only">{pct} % locker</span>}
+    </span>
   )
 }
 
@@ -297,6 +388,7 @@ function Week({ monday, workouts, all, gym, today, activities, onOpen, onToggle 
   const runKm = workouts.filter((w) => w.sport === 'run').reduce((a, w) => a + (w.distance_km ?? 0), 0)
   const mins = workouts.filter((w) => w.sport !== 'race').reduce((a, w) => a + (w.duration_min ?? 0), 0)
   const isNow = monday === mondayOf(today)
+  const { easyPct } = plannedIntensity(workouts)
   return (
     <Card className={isNow ? 'p-4 ring-2 ring-accent/30' : ''}>
       <header className="mb-1">
@@ -308,10 +400,18 @@ function Week({ monday, workouts, all, gym, today, activities, onOpen, onToggle 
           {dateLabel(monday)} – {dateLabel(addDays(monday, 6))}
           {runKm > 0 ? ` · ${Math.round(runKm)} km` : mins > 0 ? ` · ${(mins / 60).toFixed(1).replace('.', ',')} h` : ''}
         </span>
+        {easyPct != null && (
+          <div className="mt-1.5 max-w-64">
+            <IntensityBar pct={easyPct} />
+          </div>
+        )}
       </header>
       <ul className="divide-y divide-line">
         {workouts.map((w) => (
-          <li key={w.id} className="flex items-center">
+          <li key={w.id} className="relative flex items-center">
+            {w.key_session && w.sport !== 'race' && (
+              <span className="absolute top-2.5 bottom-2.5 -left-4 w-1 rounded-r-full" style={{ background: HARD_KINDS.includes(w.kind) ? 'var(--c-hart)' : 'var(--c-lock)' }} aria-hidden />
+            )}
             <button onClick={() => onOpen(w.id)} className={`press-row -ml-2 flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-lg py-2 pl-2 text-left ${w.date === today ? 'font-semibold' : ''}`}>
               <span className="w-8 shrink-0 text-xs text-ink-3">
                 {WEEKDAY_SHORT[weekday(w.date)]}
@@ -320,9 +420,10 @@ function Week({ monday, workouts, all, gym, today, activities, onOpen, onToggle 
               </span>
               <SportIcon group={w.sport} size={34} />
               <span className={`min-w-0 flex-1 ${w.status === 'skipped' ? 'text-ink-3 line-through' : ''}`}>
-                <span className="block truncate text-sm">
-                  {w.title}
-                  {w.key_session && w.sport !== 'race' && <span className="ml-1.5 text-xs" style={{ color: 'var(--series-2)' }}>●</span>}
+                <span className="flex min-w-0 items-center gap-1.5 text-sm">
+                  <span className="truncate">{w.title}</span>
+                  {kindChip(w) && <KindChip w={w} />}
+                  {w.key_session && w.sport !== 'race' && <span className="sr-only">(Schlüsseleinheit)</span>}
                 </span>
                 <span className="block text-xs font-normal text-ink-3">
                   {workoutAmount(w)}
@@ -337,6 +438,18 @@ function Week({ monday, workouts, all, gym, today, activities, onOpen, onToggle 
       </ul>
       <WeekStrengthLine monday={monday} workouts={all} gym={gym} today={today} />
     </Card>
+  )
+}
+
+function KindChip({ w }: { w: PlanWorkout }) {
+  const c = kindChip(w)!
+  return (
+    <span
+      className="shrink-0 rounded-full px-1.5 py-px text-xs font-medium"
+      style={{ color: c.color, background: `color-mix(in oklab, ${c.color} 14%, transparent)` }}
+    >
+      {c.text}
+    </span>
   )
 }
 
