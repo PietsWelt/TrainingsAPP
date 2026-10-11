@@ -9,8 +9,8 @@ import { useSwipeTabs } from './lib/useSwipeTabs'
 import { useDailyLog } from './lib/useDailyLog'
 import type { Session } from '@supabase/supabase-js'
 import { appState, MIGRATION_HINT } from './lib/appState'
-import { clearCache, readCache, sameData, writeCache } from './lib/cache'
-import { latestRun, loadDataset, syncAndWait } from './lib/data'
+import { clearCache, readCache, writeCache } from './lib/cache'
+import { latestRun, loadChanges, SYNCED_AT_HINT, syncAndWait } from './lib/data'
 import { dateLabel, relativeTime } from './lib/format'
 import { localToday } from './lib/plan/dates'
 import { supabase } from './lib/supabase'
@@ -61,25 +61,36 @@ function Main() {
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
-  const plan = usePlan(data?.activities, day, data?.days, data?.records, data?.lactate)
+  const plan = usePlan(data?.activities, day, data?.days, data?.records, data?.lactate, data?.lastSync?.id ?? null)
   const log = useDailyLog()
 
+  // Neuester Stand für refresh(), ohne dass refresh bei jeder Änderung neu entsteht.
+  const dataRef = useRef(data)
+  dataRef.current = data
   const refresh = useCallback(
-    () =>
-      loadDataset()
+    () => {
+      const t0 = performance.now()
+      // Mit vorhandenen Daten nur Geändertes nachladen; einmal am Tag und ohne Migration 0018 alles.
+      return loadChanges(dataRef.current)
       .then((d) => {
+        // Messpunkt fürs Handy (Safari/Chrome: Performance-Tab): wie lange ein Aktualisieren dauert.
+        performance.measure('refresh', { start: t0 })
         loadedAt.current = Date.now()
-        // Unveränderte Daten behalten das alte Objekt: Plan und Diagramme rechnen dann nicht neu.
-        setData((prev) => (sameData(prev, d) ? prev : d))
-        writeCache(d)
+        // Ohne neue Zeilen kommt dasselbe Objekt zurück: Plan und Diagramme rechnen dann nicht neu.
+        if (d !== dataRef.current) {
+          dataRef.current = d
+          setData(d)
+          writeCache(d)
+        }
         setError(null)
-        // Tabelle app_state fehlt: einmal pro Sitzung sagen, welche SQL-Datei fehlt.
-        if (appState.missing && !hinted.current) {
+        // Fehlende SQL-Dateien: einmal pro Sitzung sagen, welche.
+        if (!hinted.current && (appState.missing || d.meta?.incremental === false)) {
           hinted.current = true
-          toast(MIGRATION_HINT)
+          toast(appState.missing ? MIGRATION_HINT : SYNCED_AT_HINT)
         }
       })
-      .catch((e: Error) => setError(e.message)),
+      .catch((e: Error) => setError(e.message))
+    },
     [],
   )
 

@@ -18,6 +18,7 @@ export const SHARED_KEYS = [
   'checkin.done',
   'garmin.races.handled',
   'strength.skip',
+  'plan.maintained',
 ] as const
 export type SharedKey = (typeof SHARED_KEYS)[number]
 

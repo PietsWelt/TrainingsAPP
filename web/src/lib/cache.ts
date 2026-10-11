@@ -3,7 +3,9 @@
 
 import type { Dataset } from './types'
 
-const KEY = 'dataset.v1'
+// v2: mit meta fürs Nachladen. Alte Stände (v1) laden einmal komplett neu.
+const KEY = 'dataset.v2'
+const OLD = ['dataset.v1']
 
 export function readCache(): Dataset | null {
   try {
@@ -26,12 +28,8 @@ export function writeCache(data: Dataset) {
 export function clearCache() {
   try {
     localStorage.removeItem(KEY)
+    for (const k of OLD) localStorage.removeItem(k)
   } catch {
     // nichts zu tun
   }
-}
-
-/** Gleicher Inhalt wie vorher? Dann bleibt das alte Objekt und nichts wird neu berechnet. */
-export function sameData(a: Dataset | null, b: Dataset): boolean {
-  return a != null && JSON.stringify(a) === JSON.stringify(b)
 }
