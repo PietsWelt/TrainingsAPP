@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearCache, readCache, sameData, writeCache } from './cache'
+import { clearCache, readCache, writeCache } from './cache'
 import { demoDataset } from './demo'
 
 const mem = new Map<string, string>()
@@ -21,10 +21,11 @@ describe('cache', () => {
     expect(readCache()).toBeNull()
   })
 
-  it('erkennt unveränderte Daten', () => {
-    const d = demoDataset()
-    expect(sameData(null, d)).toBe(false)
-    expect(sameData(d, JSON.parse(JSON.stringify(d)))).toBe(true)
-    expect(sameData(d, { ...d, activities: d.activities.slice(1) })).toBe(false)
+  it('räumt den alten Stand beim Abmelden mit weg', () => {
+    mem.set('dataset.v1', '{}')
+    writeCache(demoDataset())
+    clearCache()
+    expect(mem.has('dataset.v1')).toBe(false)
+    expect(readCache()).toBeNull()
   })
 })

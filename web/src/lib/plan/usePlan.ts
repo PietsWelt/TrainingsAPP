@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Best } from '../records'
 import type { Activity, DailyMetrics, GarminLactate } from '../types'
-import { autoComplete, fillSteps, giveFeedback, isPartial, refreshHrTargets, skipWorkout } from './adapt'
+import { autoComplete, fillSteps, needsSteps, giveFeedback, isPartial, refreshHrTargets, skipWorkout } from './adapt'
 import { analyzeRun, merge, shiftPaces } from './analyze'
 import { catchUp, reentry } from './catchup'
 import { sportGroup } from '../format'
@@ -56,12 +56,23 @@ const readReleased = (): number[] => getState<number[]>('plan.released', [])
 const release = (id: number) => void addToList('plan.released', id)
 const readApplied = () => getState<{ date: string; level: number } | null>('overload.applied', null)
 
+/** Nachholen, Wiedereinstieg und Überlastungsschutz laufen pro Halbtag und Sync nur auf einem Gerät. */
+export interface Maintained {
+  date: string
+  syncId: number | null
+  afternoon: boolean
+}
+export function alreadyMaintained(m: Maintained | null, date: string, syncId: number | null, hour: number): boolean {
+  return m != null && m.date === date && m.syncId === syncId && m.afternoon === hour >= 12
+}
+
 export function usePlan(
   activities: Activity[] | undefined,
   day = localToday(),
   metrics: DailyMetrics[] = NO_METRICS,
   records: Best[] = NO_RECORDS,
   lactate: GarminLactate[] = NO_LACTATE,
+  syncId: number | null = null,
 ): PlanState {
   const [events, setEvents] = useState<RaceEvent[]>([])
   const [workouts, setWorkouts] = useState<PlanWorkout[]>([])
@@ -75,12 +86,15 @@ export function usePlan(
       // Erst den geteilten Stand abwarten: sonst setzt ein Gerät Haken wieder, die ein anderes entfernt hat.
       const [ev, ws] = await Promise.all([planStore.listEvents(), planStore.listWorkouts(), appState.ready()])
       const today = day
+      const hour = new Date().getHours()
+      // Ein anderes Gerät hat für diesen Stand schon nachgeholt und geschützt: dann nicht noch einmal (und keine doppelten Meldungen).
+      const maintain = !alreadyMaintained(getState<Maintained | null>('plan.maintained', null), today, syncId, hour)
       const released = new Set(readReleased())
       const usable = activities.filter((a) => !released.has(a.id))
       const done = autoComplete(ws, usable, today)
       const fitness = fitnessFrom(activities, today, records, lactate)
       // Ablauf für die Uhr bei älteren Plänen nachtragen (Plan ab heute neu berechnen, nur Abläufe übernehmen).
-      const fresh = hasColumn('steps') ? generateAll(ev, fitness, addDays(today, -1), () => crypto.randomUUID()) : []
+      const fresh = hasColumn('steps') && needsSteps(ws, today) ? generateAll(ev, fitness, addDays(today, -1), () => crypto.randomUUID()) : []
       const filled = hasColumn('steps')
         ? ev
             .filter((e) => e.date >= today)
@@ -90,8 +104,8 @@ export function usePlan(
       let current = ws.map((w) => [...done, ...filled].find((c) => c.id === w.id) ?? w)
       // Verpasstes auslassen oder als ersetzt werten, nach einer Pause sanft wieder einsteigen.
       let tidy: PlanWorkout[] = []
-      if (activities) {
-        const cu = catchUp(current, usable, today, new Date().getHours())
+      if (activities && maintain) {
+        const cu = catchUp(current, usable, today, hour)
         current = current.map((w) => cu.changed.find((c) => c.id === w.id) ?? w)
         const re = reentry(current, activities, today)
         current = current.map((w) => re.changed.find((c) => c.id === w.id) ?? w)
@@ -120,7 +134,7 @@ export function usePlan(
       }
       // Schutz vor Überlastung: zu große Sprünge beim langen Lauf kappen, bei Warnzeichen zurückschrauben.
       let safety: PlanWorkout[] = []
-      if (activities) {
+      if (activities && maintain) {
         const guard = longRunGuard(current, activities, today)
         current = current.map((w) => guard.changed.find((c) => c.id === w.id) ?? w)
         const check = overloadCheck(metrics, activities, current, today)
@@ -133,6 +147,7 @@ export function usePlan(
       }
       const all = merge(done, filled, tidy, hr, analyzed, safety)
       if (all.length) await planStore.updateWorkouts(all)
+      if (maintain && ev.length) void setState('plan.maintained', { date: today, syncId, afternoon: hour >= 12 } satisfies Maintained)
       const byId = new Map(current.map((w) => [w.id, w]))
       setEvents(ev)
       setWorkouts(ws.map((w) => byId.get(w.id) ?? w))
@@ -142,7 +157,7 @@ export function usePlan(
     } finally {
       setLoading(false)
     }
-  }, [activities, day, metrics, records, lactate])
+  }, [activities, day, metrics, records, lactate, syncId])
 
   useEffect(() => {
     void reload()

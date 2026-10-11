@@ -13,7 +13,21 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       // Alte App-Versionen aus dem Cache räumen, damit nichts Veraltetes liegen bleibt.
-      workbox: { cleanupOutdatedCaches: true },
+      workbox: {
+        cleanupOutdatedCaches: true,
+        // Vorab nur, was der erste Bildschirm braucht. Trends (Diagramme) lädt die App kurz nach dem Start ohnehin,
+        // Schriften und das große Icon holt der Browser bei Bedarf; alles landet dann im Laufzeit-Cache unten.
+        // Seltene Schrift-Teile (z.B. kyrillisch) lädt der Browser über unicode-range nur, wenn ein Zeichen daraus gebraucht wird.
+        globIgnores: ['**/*-{cyrillic,cyrillic-ext,vietnamese,latin-ext}-wght-normal-*.woff2', '**/Trends-*.js', 'icon-512.png'],
+        runtimeCaching: [
+          {
+            // Dateinamen enthalten einen Hash: einmal geladen, ändern sie sich nie.
+            urlPattern: ({ url }) => url.pathname.includes('/assets/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'assets', expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 60 } },
+          },
+        ],
+      },
       manifest: {
         name: 'Training',
         short_name: 'Training',

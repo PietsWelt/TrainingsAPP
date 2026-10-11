@@ -360,6 +360,23 @@ function fitSteps(steps: Step[], distanceKm: number | null): Step[] {
  * Pläne von vor Etappe 4 haben keinen Ablauf für die Uhr. Der Ablauf wird aus einem frisch
  * erzeugten Plan übernommen (gleicher Tag und Titel); Umfang und Anpassungen bleiben, wie sie sind.
  */
+/** Harte Arten haben im Plan immer einen Ablauf für die Uhr. */
+const QUALITY: PlanWorkout['kind'][] = ['tempo', 'intervals', 'fartlek', 'race_pace']
+
+/**
+ * Fehlt einer künftigen geplanten Laufeinheit der Ablauf für die Uhr? Nur dann lohnt es, den Plan zum Nachtragen neu zu erzeugen.
+ * Regenerationsläufe zählen nicht: Ältere Pläne haben dort nie einen Ablauf, die Prüfung schlüge sonst immer an.
+ * Ebenso Läufe nur nach Zeit (Rennwoche, Triathlon) und lockere Läufe, solange es kein Tempo- oder Puls-Ziel gibt.
+ */
+export function needsSteps(plan: PlanWorkout[], today: string): boolean {
+  const future = plan.filter((w) => w.status === 'planned' && w.date >= today && w.sport === 'run' && !w.original && w.kind !== 'recovery')
+  const easy = (w: PlanWorkout) => (w.kind === 'easy' || w.kind === 'long') && w.distance_km != null
+  const easyHasSteps = future.some((w) => easy(w) && w.steps?.length)
+  return future.some(
+    (w) => w.steps == null && (QUALITY.includes(w.kind) || (w.kind === 'strides' && w.distance_km != null) || (easyHasSteps && easy(w))),
+  )
+}
+
 export function fillSteps(plan: PlanWorkout[], fresh: PlanWorkout[], today: string): PlanWorkout[] {
   const byKey = new Map(fresh.filter((w) => w.steps?.length).map((w) => [`${w.date}|${w.title}`, w.steps!]))
   const changed: PlanWorkout[] = []

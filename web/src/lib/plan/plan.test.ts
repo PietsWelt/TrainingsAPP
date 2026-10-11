@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { autoComplete, coverage, fillSteps, isPartial, giveFeedback, legsProposal, progressOf, readinessProposal, refreshHrTargets, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
+import { autoComplete, coverage, fillSteps, needsSteps, isPartial, giveFeedback, legsProposal, progressOf, readinessProposal, refreshHrTargets, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
 import { stepLines } from './labels'
 import { deloadWeeks, generatePlan, longCapKm, LONG_MAX_MIN, MAX_GAIN, pacesFor, paceSchedule, peakKm, phasesFor, planThreshold, volumesFor } from './generate'
 import { explain } from './explain'
+import { alreadyMaintained } from './usePlan'
 import type { Readiness } from '../readiness'
 import type { Fitness, PlanWorkout, RaceEvent } from './types'
 
@@ -473,5 +474,39 @@ describe('Puls-Ziele für lockere Läufe', () => {
     const added = refreshHrTargets(old, 148, TODAY)
     expect(flat(added).filter(({ s }) => s.pace_slow != null).every(({ s }) => s.hr_high === 148)).toBe(true)
     expect(stepLines(added.find((w) => w.kind === 'easy')!.steps!)[0]).toContain('Puls 128–148')
+  })
+})
+
+describe('needsSteps', () => {
+  const plan = generatePlan(ev(), fit, TODAY, id)
+  it('löst das Nachtragen nur aus, wenn wirklich ein Ablauf fehlt', () => {
+    expect(needsSteps(plan, TODAY)).toBe(false)
+    const quality = plan.find((w) => w.date > TODAY && w.kind === 'tempo')!
+    expect(needsSteps(plan.map((w) => (w.id === quality.id ? { ...w, steps: null } : w)), TODAY)).toBe(true)
+  })
+  it('ignoriert Regenerationsläufe, Vergangenes und Erledigtes', () => {
+    const strip = (pred: (w: PlanWorkout) => boolean) => plan.map((w) => (pred(w) ? { ...w, steps: null } : w))
+    expect(needsSteps(strip((w) => w.kind === 'recovery'), TODAY)).toBe(false)
+    // Lockere Läufe ohne Tempo-Ziel haben nie einen Ablauf: kein Grund, neu zu erzeugen.
+    expect(needsSteps(strip((w) => w.kind === 'easy' || w.kind === 'long'), TODAY)).toBe(false)
+    // Läufe nur nach Zeit (Rennwoche) bekommen nie einen Ablauf.
+    expect(needsSteps(strip((w) => w.distance_km == null && w.kind === 'easy'), TODAY)).toBe(false)
+    const withEasy = plan.map((w) => (w.kind === 'easy' && w.distance_km != null ? { ...w, steps: [{ type: 'run' as const, m: 5000 }] } : w))
+    const oneEasy = withEasy.find((w) => w.date > TODAY && w.kind === 'easy' && w.distance_km != null)!
+    expect(needsSteps(withEasy.map((w) => (w.id === oneEasy.id ? { ...w, steps: null } : w)), TODAY)).toBe(true)
+    const later = plan.find((w) => w.date > TODAY && w.sport === 'run')!
+    expect(needsSteps(strip((w) => w.id === later.id), addDays(later.date, 1))).toBe(false)
+    expect(needsSteps(strip((w) => w.id === later.id).map((w) => (w.id === later.id ? { ...w, status: 'done' as const } : w)), TODAY)).toBe(false)
+  })
+})
+
+describe('alreadyMaintained', () => {
+  it('überspringt nur bei gleichem Tag, Sync und Tageshälfte', () => {
+    const m = { date: TODAY, syncId: 8, afternoon: false }
+    expect(alreadyMaintained(null, TODAY, 8, 9)).toBe(false)
+    expect(alreadyMaintained(m, TODAY, 8, 9)).toBe(true)
+    expect(alreadyMaintained(m, TODAY, 9, 9)).toBe(false)
+    expect(alreadyMaintained(m, TODAY, 8, 14)).toBe(false)
+    expect(alreadyMaintained(m, addDays(TODAY, 1), 8, 9)).toBe(false)
   })
 })

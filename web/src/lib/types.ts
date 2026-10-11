@@ -3,6 +3,8 @@ import type { Best } from './records'
 
 export interface Activity {
   id: number
+  /** Letzte Aktualisierung durch den Sync (mit Migration 0018 bei jeder Änderung). */
+  synced_at?: string
   start_time: string
   local_date: string
   sport: string
@@ -51,6 +53,7 @@ export interface GarminLactate {
 
 export interface DailyMetrics {
   date: string
+  synced_at?: string
   sleep_s: number | null
   deep_sleep_s: number | null
   light_sleep_s: number | null
@@ -92,6 +95,14 @@ export interface Dataset {
   predictions?: RacePrediction[]
   /** Rennen aus dem Garmin-Kalender (Migration 0009). */
   garminRaces?: GarminRace[]
+  /** Stand des Nachladens: neuestes synced_at, Tag des letzten kompletten Ladens, ob Migration 0018 da ist. */
+  meta?: DatasetMeta
+}
+
+export interface DatasetMeta {
+  syncedMax: string
+  fullAt: string
+  incremental: boolean
 }
 
 export interface RacePrediction {
