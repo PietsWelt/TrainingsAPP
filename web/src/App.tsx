@@ -291,7 +291,7 @@ function NavIcon({ icon, active }: { icon: ReactNode; active: boolean }) {
 
 function NavButton({ active, onClick, label, icon }: { active: boolean; onClick: () => void; label: string; icon: ReactNode }) {
   return (
-    <button onClick={onClick} aria-current={active ? 'page' : undefined} className={`relative flex min-h-13 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 text-[11px] font-semibold transition-colors duration-200 ${active ? 'text-ink' : 'text-ink-3'}`}>
+    <button onClick={onClick} aria-current={active ? 'page' : undefined} className={`relative flex min-h-13 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 text-xs font-semibold transition-colors duration-200 ${active ? 'text-ink' : 'text-ink-3'}`}>
       <NavIcon icon={icon} active={active} />
       {label}
     </button>

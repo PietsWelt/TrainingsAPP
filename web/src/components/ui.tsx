@@ -148,9 +148,12 @@ export function StatusLabel({ status, children }: { status: Status; children: Re
 }
 
 /** Kleine Plakette, z.B. „Neu“ oder „Diese Woche“. */
+/** Farbiger Text auf getönter Fläche: zur Schriftfarbe hin gemischt, damit er auch auf grauen Flächen 4,5:1 erreicht. */
+export const readableTint = (color: string) => `color-mix(in oklab, ${color} 72%, var(--text))`
+
 export function Pill({ children, color = 'var(--accent)' }: { children: ReactNode; color?: string }) {
   return (
-    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ color, background: `color-mix(in srgb, ${color} 14%, transparent)` }}>
+    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold" style={{ color: readableTint(color), background: `color-mix(in srgb, ${color} 14%, transparent)` }}>
       {children}
     </span>
   )

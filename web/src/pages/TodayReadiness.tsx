@@ -16,7 +16,7 @@ export function ReadinessCard({ r, garmin, variant = 'card' }: { r: Readiness; g
       <button onClick={() => setOpen(!open)} aria-expanded={open} className={`press-row -m-2 flex w-[calc(100%+1rem)] items-center rounded-2xl p-2 text-left ${embedded ? 'gap-4' : 'gap-5'}`}>
         <Ring value={r.score} size={embedded ? 92 : 108} stroke={embedded ? 9 : 10} color="brand" label={`Readiness ${r.score} von 100`}>
           <span className="font-display text-[32px] leading-none font-bold tabular-nums">{r.score}</span>
-          <span className="mt-0.5 text-[11px] text-ink-3">von 100</span>
+          <span className="mt-0.5 text-xs text-ink-3">von 100</span>
         </Ring>
         <div className="min-w-0 flex-1">
           <div className="text-xs font-medium text-ink-3">Deine Readiness</div>

@@ -14,7 +14,7 @@
   --glass: rgb(255 255 255 / 0.66);
   --text: #16142a;
   --text-2: #4f4c6a;
-  --text-3: #7e7b98;
+  --text-3: #69658a; /* ≥ 4,5:1 auf Karte, Hintergrund und surface-2 */
   --accent: #5b45d6;
   --c-erh: #007faa;
   --c-lock: #00a071;
@@ -63,7 +63,7 @@
     --glass: rgb(16 13 40 / 0.72);
     --text: #f1efff;
     --text-2: #c4c0e4;
-    --text-3: #8d89b4;
+    --text-3: #9a96c0; /* ≥ 4,5:1 auch auf surface-2 */
     --accent: #22d3ee;
     --c-erh: #00a3c9;
     --c-lock: #24ae56;
@@ -103,7 +103,7 @@
   --glass: rgb(16 13 40 / 0.72);
   --text: #f1efff;
   --text-2: #c4c0e4;
-  --text-3: #8d89b4;
+  --text-3: #9a96c0; /* ≥ 4,5:1 auch auf surface-2 */
   --accent: #22d3ee;
   --c-erh: #00a3c9;
   --c-lock: #24ae56;
@@ -170,6 +170,12 @@ body {
   overscroll-behavior: none;
 }
 .recharts-wrapper *:focus { outline: none; }
+/* Sichtbarer Fokus nur bei Tastatur (nicht beim Tippen): Knöpfe, Links, Zeilen und Eingaben. */
+:where(button, a, [role="button"], [role="tab"], summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
 
 /* Karten: Milchglas. Bewusst ohne backdrop-filter, das kostet auf älteren Handys beim Scrollen zu viel. */
 .card { background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--shadow); border-radius: 22px; }

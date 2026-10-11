@@ -167,7 +167,7 @@ export function MobilitySheet({ kind, done = false, onClose, onDone }: { kind: R
         <div className="space-y-3">
           {EVIDENCE.map((e) => (
             <div key={e.title}>
-              <div className="text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{e.title}</div>
+              <div className="text-xs font-semibold tracking-wide text-ink-3 uppercase">{e.title}</div>
               <p className="mt-1 text-sm text-ink-2">{e.text}</p>
               <p className="mt-1 text-xs text-ink-3">Quellen: {e.source}</p>
             </div>

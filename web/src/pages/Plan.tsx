@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Sheet } from '../components/Sheet'
 import { toast } from '../lib/toast'
-import { Card, Pill, Ring, SportIcon } from '../components/ui'
+import { Card, Pill, readableTint, Ring, SportIcon } from '../components/ui'
 import { dateLabel } from '../lib/format'
 import { useAppState } from '../lib/appState'
 import { guessType, markHandled, openSuggestions, type GarminRace } from '../lib/garminRaces'
@@ -233,7 +233,7 @@ function EventHeader({ event, workouts, today, activities, sideOf, onEdit }: { e
       <div className="mt-5 flex items-center gap-5">
         <Ring value={days != null ? span - days : 0} max={span} size={96} stroke={9} color="brand" label={`${days ?? 0} Tage bis zum Rennen`}>
           <span className="font-display text-[26px] leading-none font-bold tabular-nums">{days ?? '–'}</span>
-          <span className="mt-0.5 text-[11px] text-ink-3">{days === 1 ? 'Tag' : 'Tage'}</span>
+          <span className="mt-0.5 text-xs text-ink-3">{days === 1 ? 'Tag' : 'Tage'}</span>
         </Ring>
         <div className="min-w-0 flex-1 space-y-3">
           {current && (
@@ -247,7 +247,7 @@ function EventHeader({ event, workouts, today, activities, sideOf, onEdit }: { e
           ) : (
           <div>
             {/* Fortschritt: erledigt (Akzent) vor dem Soll bis heute (Markierung). */}
-            <div className="relative h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+            <div className="relative h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label="Fortschritt im Plan" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--brand)' }} />
               {duePct > 0 && duePct < 100 && <div className="absolute top-0 h-full w-0.5 bg-ink-3" style={{ left: `${duePct}%` }} />}
             </div>
@@ -446,7 +446,7 @@ function KindChip({ w }: { w: PlanWorkout }) {
   return (
     <span
       className="shrink-0 rounded-full px-1.5 py-px text-xs font-medium"
-      style={{ color: c.color, background: `color-mix(in oklab, ${c.color} 14%, transparent)` }}
+      style={{ color: readableTint(c.color), background: `color-mix(in oklab, ${c.color} 14%, transparent)` }}
     >
       {c.text}
     </span>
@@ -770,7 +770,7 @@ function EventForm({ event, draft, others, onClose, onSave, onDelete }: {
             Trainingstage pro Woche
             <div className="mt-1 grid grid-cols-5 gap-1.5">
               {[3, 4, 5, 6, 7].map((d) => (
-                <button key={d} type="button" onClick={() => setDays(d)} className={`min-h-11 rounded-xl text-[15px] font-semibold ${d === days ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}>
+                <button key={d} type="button" onClick={() => setDays(d)} aria-pressed={d === days} aria-label={`${d} Trainingstage pro Woche`} className={`min-h-11 rounded-xl text-[15px] font-semibold ${d === days ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}>
                   {d}
                 </button>
               ))}
@@ -780,7 +780,7 @@ function EventForm({ event, draft, others, onClose, onSave, onDelete }: {
             Tag für die lange Einheit
             <div className="mt-1 grid grid-cols-7 gap-1">
               {WEEKDAY_SHORT.map((d, i) => (
-                <button key={d} type="button" onClick={() => setLongDay(i)} className={`min-h-11 rounded-xl text-sm font-semibold ${i === longDay ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}>
+                <button key={d} type="button" onClick={() => setLongDay(i)} aria-pressed={i === longDay} aria-label={`Lange Einheit am ${WEEKDAY_LONG[i]}`} className={`min-h-11 rounded-xl text-sm font-semibold ${i === longDay ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}>
                   {d}
                 </button>
               ))}
@@ -850,7 +850,7 @@ function WhyCard({ w }: { w: PlanWorkout }) {
         </div>
       </dl>
       <p className="mt-3 text-xs text-ink-3">{e.phase}</p>
-      <p className="mt-1 text-[11px] text-ink-3">Quellen: {e.sources.join(' · ')}</p>
+      <p className="mt-1 text-xs text-ink-3">Quellen: {e.sources.join(' · ')}</p>
     </Card>
   )
 }

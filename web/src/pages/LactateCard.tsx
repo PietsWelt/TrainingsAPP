@@ -55,7 +55,7 @@ function Ladder({ aet, lt, garmin }: { aet: Aet | null; lt: Aet | null; garmin: 
         <div className="flex-1" style={{ background: 'var(--zone-5)' }} />
       </div>
       <div className="relative h-9">{garmin && <Mark at={pos(garmin.hr)} label={`Garmin · ${garmin.hr}`} />}</div>
-      <div className="flex justify-between text-[11px] text-ink-3">
+      <div className="flex justify-between text-xs text-ink-3">
         <span>locker</span>
         {green != null && <span>mittel</span>}
         <span>hart</span>
@@ -68,7 +68,7 @@ function Mark({ at, label, up = false }: { at: string; label: string; up?: boole
   return (
     <div className={`absolute flex -translate-x-1/2 flex-col items-center ${up ? 'bottom-0' : 'top-0'}`} style={{ left: at }}>
       {!up && <div className="h-2 w-0.5 rounded-full bg-ink" />}
-      <span className="text-[11px] font-medium whitespace-nowrap text-ink-2 tabular-nums">{label}</span>
+      <span className="text-xs font-medium whitespace-nowrap text-ink-2 tabular-nums">{label}</span>
       {up && <div className="h-2 w-0.5 rounded-full bg-ink" />}
     </div>
   )
@@ -83,7 +83,7 @@ function Value({ title, hr, mps, note }: { title: string; hr: number; mps: numbe
         <span className="text-sm text-ink-3">bpm</span>
       </div>
       <div className="text-sm font-medium text-ink-2 tabular-nums">{mps ? speed(mps, 'running') : 'Tempo fehlt'}</div>
-      <div className="mt-1 text-[11px] text-ink-3">{note}</div>
+      <div className="mt-1 text-xs text-ink-3">{note}</div>
     </div>
   )
 }
@@ -165,7 +165,7 @@ export function LactateCard({ activities, lactate, today, from }: { activities: 
         <div className="space-y-3 pb-1">
           {EVIDENCE.map((e) => (
             <div key={e.title}>
-              <div className="text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{e.title}</div>
+              <div className="text-xs font-semibold tracking-wide text-ink-3 uppercase">{e.title}</div>
               <p className="mt-1 text-sm text-ink-2">{e.text}</p>
               <p className="mt-1 text-xs text-ink-3">Quellen: {e.source}</p>
             </div>
