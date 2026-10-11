@@ -19,6 +19,8 @@ import { explain } from '../lib/plan/explain'
 import type { Activity, RacePrediction } from '../lib/types'
 import type { Best } from '../lib/records'
 import { RaceCheck } from './PlanInsights'
+import { arrange, planScope } from '../lib/plan/multi'
+import { PrioritySheet, PriorityCard, PriorityQuestion, PrioStar } from './PlanPriority'
 import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
 
@@ -30,9 +32,19 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
   const [handled, setHandled] = useState(handledIds)
   const suggestions = openSuggestions(garminRaces ?? [], plan.events, today, handled)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [askPrio, setAskPrio] = useState(false)
+  const arr = arrange(plan.events, today)
+  const future = plan.events.filter((e) => arr.roles.has(e.id))
 
-  const selected = plan.events.find((e) => e.id === selectedId) ?? upcoming[0] ?? plan.events.at(-1)
-  const workouts = useMemo(() => plan.workouts.filter((w) => w.event_id === selected?.id), [plan.workouts, selected?.id])
+  const selected = plan.events.find((e) => e.id === selectedId) ?? (arr.chosen ? arr.prio : null) ?? upcoming[0] ?? plan.events.at(-1)
+  // Ein eingebautes Nebenrennen zeigt den Plan, in dem es liegt; das Hauptrennen zeigt seine Nebenrennen mit.
+  const scope = selected ? (arr.roles.has(selected.id) ? planScope(arr, selected.id) : [selected.id]) : []
+  const workouts = plan.workouts.filter((w) => scope.includes(w.event_id))
+  const hostName = (id: string) => {
+    const r = arr.roles.get(id)
+    return r?.kind === 'inside' ? plan.events.find((e) => e.id === r.owner)?.name : undefined
+  }
+  const ownWorkouts = selected ? workouts.filter((w) => w.date <= selected.date) : []
   const opened = workouts.find((w) => w.id === openId)
 
   async function toggleDone(w: PlanWorkout) {
@@ -41,6 +53,16 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
     try {
       await plan.setStatus(w, done ? 'done' : 'planned')
       if (done) toast(`${w.title} erledigt. Stark!`)
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
+
+  async function pickPrio(id: string) {
+    try {
+      await plan.setPriority(id)
+      setSelectedId(id)
+      toast(`${plan.events.find((e) => e.id === id)?.name} ist jetzt dein Hauptrennen. Pläne ab morgen abgestimmt.`)
     } catch (e) {
       toast((e as Error).message, 'error')
     }
@@ -63,6 +85,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
             }}
             className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-medium ${e.id === selected?.id ? 'bg-ink text-bg' : 'card text-ink-2'} ${e.date < today ? 'opacity-60' : ''}`}
           >
+            {arr.multiple && arr.prio?.id === e.id && arr.chosen && <span className="mr-1"><PrioStar /></span>}
             {e.name}
           </button>
         ))}
@@ -70,6 +93,8 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
           + Rennen
         </button>
       </div>
+
+      <PriorityQuestion arr={arr} upcoming={future} onPick={pickPrio} />
 
       {suggestions.map((r) => (
         <Card key={r.id} title="Rennen aus Garmin" subtitle={`${r.name} · ${dateLabel(r.date, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}`}>
@@ -104,8 +129,9 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
 
       {selected && (
         <>
-          <EventHeader event={selected} workouts={workouts} today={today} activities={activities} onEdit={() => setEditing(selected)} />
-          <RaceCheck event={selected} workouts={workouts} activities={activities ?? []} records={records ?? []} predictions={predictions} today={today} />
+          <EventHeader event={selected} workouts={ownWorkouts} today={today} activities={activities} sideOf={hostName(selected.id)} onEdit={() => setEditing(selected)} />
+          <PriorityCard arr={arr} event={selected} events={plan.events} onChange={() => setAskPrio(true)} />
+          <RaceCheck event={selected} workouts={ownWorkouts} activities={activities ?? []} records={records ?? []} predictions={predictions} today={today} />
           <WeekList activities={activities} workouts={workouts} all={plan.workouts} gym={gym ?? {}} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
         </>
       )}
@@ -115,9 +141,17 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
           event={editing === 'new' || 'draft' in editing ? null : editing}
           draft={editing !== 'new' && 'draft' in editing ? editing.draft : undefined}
           onClose={() => setEditing(null)}
+          others={future.filter((e) => e.id !== (editing !== 'new' && !('draft' in editing) ? editing.id : ''))}
           onSave={async (e, isNew) => {
             await plan.saveEvent(e, isNew)
-            toast(isNew ? 'Gespeichert: Rennen angelegt, Plan erstellt.' : 'Gespeichert: Rennen geändert, Plan ab morgen angepasst.')
+            const several = future.some((x) => x.id !== e.id)
+            toast(
+              isNew
+                ? several ? 'Gespeichert: Rennen angelegt, Pläne aufeinander abgestimmt.' : 'Gespeichert: Rennen angelegt, Plan erstellt.'
+                : several ? 'Gespeichert: Rennen geändert, alle Pläne ab morgen neu abgestimmt.' : 'Gespeichert: Rennen geändert, Plan ab morgen angepasst.',
+            )
+            // Zweites Rennen dazu und noch kein Hauptrennen gewählt: gleich fragen.
+            if (isNew && several && !e.priority && !future.some((x) => x.priority)) setAskPrio(true)
             if (editing !== 'new' && 'draft' in editing) {
               markHandled(editing.garminId)
               setHandled(handledIds())
@@ -133,6 +167,8 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
           }}
         />
       )}
+
+      {askPrio && <PrioritySheet arr={arr} upcoming={future} onPick={pickPrio} onClose={() => setAskPrio(false)} />}
 
       {opened && (
         <WorkoutSheet
@@ -167,7 +203,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces 
   )
 }
 
-function EventHeader({ event, workouts, today, activities, onEdit }: { event: RaceEvent; workouts: PlanWorkout[]; today: string; activities?: Activity[]; onEdit: () => void }) {
+function EventHeader({ event, workouts, today, activities, sideOf, onEdit }: { event: RaceEvent; workouts: PlanWorkout[]; today: string; activities?: Activity[]; sideOf?: string; onEdit: () => void }) {
   const p = progressOf(workouts, today, activities)
   const weeks = Math.max(0, ...workouts.map((w) => w.week_index))
   const current = workouts.find((w) => w.date >= today) ?? workouts.at(-1)
@@ -203,10 +239,13 @@ function EventHeader({ event, workouts, today, activities, onEdit }: { event: Ra
         <div className="min-w-0 flex-1 space-y-3">
           {current && (
             <div>
-              <div className="text-xs text-ink-3">Woche {current.week_index} von {weeks}</div>
+              <div className="text-xs text-ink-3">Woche {current.week_index}{sideOf ? "" : ` von ${weeks}`}</div>
               <div className="text-[15px] font-semibold">{PHASE_LABEL[current.phase]}</div>
             </div>
           )}
+          {sideOf ? (
+            <div className="text-xs text-ink-2">Nebenrennen im Plan für {sideOf}</div>
+          ) : (
           <div>
             {/* Fortschritt: erledigt (Akzent) vor dem Soll bis heute (Markierung). */}
             <div className="relative h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
@@ -219,6 +258,7 @@ function EventHeader({ event, workouts, today, activities, onEdit }: { event: Ra
               {p.dueSoFar > 0 && ` · ${p.doneSoFar}/${p.dueSoFar} bis heute`}
             </div>
           </div>
+          )}
         </div>
       </div>
     </Card>
@@ -462,9 +502,10 @@ function joinGoal([h, m, s]: [string, string, string]): number | null | 'invalid
 
 const DEFAULT_DAYS: Record<EventType, number> = { '5k': 4, '10k': 4, half: 4, marathon: 5, tri_sprint: 5, tri_olympic: 6, tri_70_3: 6, tri_ironman: 6 }
 
-function EventForm({ event, draft, onClose, onSave, onDelete }: {
+function EventForm({ event, draft, others, onClose, onSave, onDelete }: {
   event: RaceEvent | null
   draft?: Partial<RaceEvent>
+  others: RaceEvent[]
   onClose: () => void
   onSave: (e: RaceEvent, isNew: boolean) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -477,6 +518,7 @@ function EventForm({ event, draft, onClose, onSave, onDelete }: {
   const [days, setDays] = useState(event?.days_per_week ?? DEFAULT_DAYS[draft?.type ?? 'half'])
   const [longDay, setLongDay] = useState(event?.long_day ?? 6)
   const [notes, setNotes] = useState(event?.notes ?? '')
+  const [prio, setPrio] = useState(event?.priority ?? false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -494,7 +536,7 @@ function EventForm({ event, draft, onClose, onSave, onDelete }: {
     setErr(null)
     try {
       await onSave(
-        { id: event?.id ?? crypto.randomUUID(), name: name.trim(), type, date, goal_time_s: goalS, days_per_week: days, long_day: longDay, notes: notes.trim() || null },
+        { id: event?.id ?? crypto.randomUUID(), name: name.trim(), type, date, goal_time_s: goalS, days_per_week: days, long_day: longDay, notes: notes.trim() || null, priority: others.length ? prio : (event?.priority ?? false) },
         !event,
       )
     } catch (e) {
@@ -632,6 +674,26 @@ function EventForm({ event, draft, onClose, onSave, onDelete }: {
               ))}
             </div>
           </div>
+          {others.length > 0 && (
+            <div className={label}>
+              Wichtigkeit
+              <div className="mt-1 grid grid-cols-2 gap-1.5">
+                {[
+                  { v: true, t: 'Hauptrennen' },
+                  { v: false, t: 'Nebenrennen' },
+                ].map((o) => (
+                  <button key={o.t} type="button" onClick={() => setPrio(o.v)} className={`min-h-11 rounded-xl text-[15px] font-semibold ${o.v === prio ? 'btn-primary' : 'bg-surface-2 text-ink-2'}`}>
+                    {o.t}
+                  </button>
+                ))}
+              </div>
+              <span className="mt-1 block font-normal text-ink-3">
+                {prio
+                  ? 'Der Plan richtet sich nach diesem Rennen. Die anderen werden eingebaut.'
+                  : `Wird in den Plan deines Hauptrennens eingebaut: kurz leichter davor, Erholung danach. Läuft gerade auch: ${others.map((o) => o.name).join(', ')}.`}
+              </span>
+            </div>
+          )}
           <label className={label}>
             Notizen
             <textarea className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />

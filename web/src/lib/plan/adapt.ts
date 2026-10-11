@@ -21,8 +21,9 @@ export interface Change {
 export function skipWorkout(all: PlanWorkout[], id: string, today: string): Change {
   const w = all.find((x) => x.id === id)
   if (!w) return { changed: [], message: '' }
-  const plan = all.filter((x) => x.event_id === w.event_id)
-  const raceDate = plan.find((x) => x.sport === 'race')?.date
+  // Rennen anderer Pläne (eingebaute Nebenrennen) mitzählen, damit nichts direkt davor oder danach landet.
+  const plan = all.filter((x) => x.event_id === w.event_id || x.sport === 'race')
+  const raceDate = all.find((x) => x.event_id === w.event_id && x.sport === 'race')?.date
   const changed: PlanWorkout[] = []
   let message: string
 
@@ -180,7 +181,8 @@ export interface Progress {
 export function progressOf(plan: PlanWorkout[], today: string, activities: Activity[] = []): Progress {
   const sessions = plan.filter((w) => w.sport !== 'race')
   const partial = (w: PlanWorkout) => isPartial(w, activities.find((a) => a.id === w.activity_id))
-  const race = plan.find((w) => w.sport === 'race')
+  // Mit eingebauten Nebenrennen zählt das letzte Rennen des Plans.
+  const race = plan.filter((w) => w.sport === 'race').at(-1)
   const due = sessions.filter((w) => w.date <= today)
   return {
     total: sessions.length,
@@ -244,8 +246,8 @@ function proposalFor(all: PlanWorkout[], today: string, cause: string, reason: s
   const w = all.find((x) => x.date === today && x.status === 'planned' && x.key_session && x.sport !== 'race' && !x.original)
   if (!w) return null
 
-  const plan = all.filter((x) => x.event_id === w.event_id)
-  const raceDate = plan.find((x) => x.sport === 'race')?.date
+  const plan = all.filter((x) => x.event_id === w.event_id || x.sport === 'race')
+  const raceDate = all.find((x) => x.event_id === w.event_id && x.sport === 'race')?.date
   const options: ReadinessOption[] = []
 
   const mins = Math.max(20, Math.round(((w.duration_min ?? 45) * 0.6) / 5) * 5)

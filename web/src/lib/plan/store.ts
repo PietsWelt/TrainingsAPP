@@ -14,6 +14,25 @@ export interface PlanStore {
 }
 
 const EVENT_COLS = 'id,name,date,type,goal_time_s,days_per_week,long_day,notes'
+// Ohne Migration 0016 merkt sich der Browser das Hauptrennen.
+const PRIO_KEY = 'plan.priority'
+let noPrioColumn = false
+export const hasPriorityColumn = () => !noPrioColumn
+function readPrio(): string | null {
+  try {
+    return localStorage.getItem(PRIO_KEY)
+  } catch {
+    return null
+  }
+}
+function writePrio(id: string | null) {
+  try {
+    if (id) localStorage.setItem(PRIO_KEY, id)
+    else localStorage.removeItem(PRIO_KEY)
+  } catch {
+    // ohne Speicher gilt die Wahl bis zum Neuladen nicht
+  }
+}
 const WORKOUT_COLS =
   'id,event_id,date,sport,kind,title,description,duration_min,distance_km,key_session,phase,week_index,status,activity_id,moved_from'
 
@@ -40,10 +59,23 @@ const supabaseStore = (): PlanStore => {
   const db = supabase!
   return {
     async listEvents() {
-      return check(await db.from('events').select(EVENT_COLS).order('date')) as RaceEvent[]
+      if (!noPrioColumn) {
+        const r = await db.from('events').select(`${EVENT_COLS},priority`).order('date')
+        if (!(r.error && /\bpriority\b/.test(r.error.message))) return check(r) as unknown as RaceEvent[]
+        noPrioColumn = true
+      }
+      const prio = readPrio()
+      const ev = check(await db.from('events').select(EVENT_COLS).order('date')) as RaceEvent[]
+      return ev.map((e) => ({ ...e, priority: e.id === prio }))
     },
     async saveEvent(e) {
-      check(await db.from('events').upsert({ ...e, updated_at: new Date().toISOString() }))
+      const row: Record<string, unknown> = { ...e, updated_at: new Date().toISOString() }
+      if (noPrioColumn) {
+        delete row.priority
+        if (e.priority) writePrio(e.id)
+        else if (readPrio() === e.id) writePrio(null)
+      } else if (row.priority === undefined) row.priority = false
+      check(await db.from('events').upsert(row))
     },
     async deleteEvent(id) {
       check(await db.from('events').delete().eq('id', id))

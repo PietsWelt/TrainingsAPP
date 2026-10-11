@@ -25,6 +25,8 @@ export interface RaceEvent {
   days_per_week: number // 3..7
   long_day: number // 0 = Montag … 6 = Sonntag
   notes: string | null
+  /** Hauptrennen (A-Rennen), wenn mehrere Pläne gleichzeitig laufen. */
+  priority?: boolean
 }
 
 export type Sport = 'run' | 'bike' | 'swim' | 'race'
