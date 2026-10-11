@@ -9,7 +9,7 @@ import { sportGroup } from '../format'
 import { toast } from '../toast'
 import { addDays, localToday } from './dates'
 import { fitnessFrom } from './fitness'
-import { generatePlan } from './generate'
+import { generateAll } from './multi'
 import { deload, longRunGuard, overloadCheck } from './overload'
 import { hasColumn, planStore } from './store'
 import type { Feedback, PlanWorkout, RaceEvent } from './types'
@@ -21,6 +21,8 @@ export interface PlanState {
   error: string | null
   saveEvent(e: RaceEvent, isNew: boolean): Promise<void>
   deleteEvent(id: string): Promise<void>
+  /** Legt das Hauptrennen fest und stimmt alle Pläne ab morgen neu ab. */
+  setPriority(id: string): Promise<void>
   setStatus(w: PlanWorkout, status: PlanWorkout['status']): Promise<void>
   skip(w: PlanWorkout): Promise<string>
   /** Speichert beliebige geänderte Einheiten (z.B. Anpassung an die Readiness). */
@@ -30,7 +32,7 @@ export interface PlanState {
 }
 
 // Nur diese Felder ändern den Plan; Name und Notizen nicht.
-const PLAN_FIELDS = ['date', 'type', 'goal_time_s', 'days_per_week', 'long_day'] as const
+const PLAN_FIELDS = ['date', 'type', 'goal_time_s', 'days_per_week', 'long_day', 'priority'] as const
 
 function friendly(e: unknown): string {
   const msg = (e as Error).message ?? String(e)
@@ -85,13 +87,11 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
       const usable = activities.filter((a) => !released.has(a.id))
       const done = autoComplete(ws, usable, today)
       // Ablauf für die Uhr bei älteren Plänen nachtragen (Plan ab heute neu berechnen, nur Abläufe übernehmen).
+      const fresh = hasColumn('steps') ? generateAll(ev, fitnessFrom(activities ?? [], today), addDays(today, -1), () => crypto.randomUUID()) : []
       const filled = hasColumn('steps')
         ? ev
             .filter((e) => e.date >= today)
-            .flatMap((e) => {
-              const fresh = generatePlan(e, fitnessFrom(activities ?? [], today), addDays(today, -1), () => crypto.randomUUID())
-              return fillSteps(ws.filter((w) => w.event_id === e.id && !done.some((d) => d.id === w.id)), fresh, today)
-            })
+            .flatMap((e) => fillSteps(ws.filter((w) => w.event_id === e.id && !done.some((d) => d.id === w.id)), fresh.filter((w) => w.event_id === e.id), today))
         : []
       // Frisch erledigte Läufe mit Uhr-Daten automatisch auswerten (nur die letzten 3 Tage, nie rückwirkend).
       let current = ws.map((w) => [...done, ...filled].find((c) => c.id === w.id) ?? w)
@@ -163,6 +163,17 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
     setWorkouts((ws) => ws.map((w) => byId.get(w.id) ?? w).sort((a, b) => a.date.localeCompare(b.date)))
   }
 
+  /**
+   * Plant alle kommenden Rennen ab morgen gemeinsam neu: Hauptrennen voll, Nebenrennen eingebaut.
+   * Vergangenes bleibt. Mit nur einem Rennen ist das genau der Plan dieses Rennens.
+   */
+  async function replanAll(list: RaceEvent[]) {
+    const today = localToday()
+    const tomorrow = addDays(today, 1)
+    const plan = generateAll(list, fitnessFrom(activities ?? [], today), today, () => crypto.randomUUID())
+    for (const e of list.filter((x) => x.date >= tomorrow)) await planStore.replaceFrom(e.id, tomorrow, plan.filter((w) => w.event_id === e.id))
+  }
+
   return {
     events,
     workouts,
@@ -170,18 +181,28 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
     error,
     async saveEvent(e, isNew) {
       const before = events.find((x) => x.id === e.id)
+      // Höchstens ein Hauptrennen: das bisherige zuerst zurücksetzen.
+      if (e.priority) for (const x of events) if (x.priority && x.id !== e.id) await planStore.saveEvent({ ...x, priority: false })
       await planStore.saveEvent(e)
-      const replan = isNew || !before || PLAN_FIELDS.some((k) => before[k] !== e[k])
+      const replan = isNew || !before || PLAN_FIELDS.some((k) => (before[k] ?? false) !== (e[k] ?? false))
       if (replan) {
-        // Vergangenes bleibt, ab morgen wird neu geplant.
-        const today = localToday()
-        const plan = generatePlan(e, fitnessFrom(activities ?? [], today), today, () => crypto.randomUUID())
-        await planStore.replaceFrom(e.id, addDays(today, 1), plan)
+        const list = [...events.filter((x) => x.id !== e.id).map((x) => (e.priority ? { ...x, priority: false } : x)), e]
+        await replanAll(list)
       }
       await reload()
     },
     async deleteEvent(id) {
       await planStore.deleteEvent(id)
+      // Ein Nebenrennen fällt weg oder ein anderes wird Hauptrennen: die übrigen neu abstimmen.
+      const rest = events.filter((x) => x.id !== id)
+      if (events.find((x) => x.id === id && x.date > localToday()) && rest.some((x) => x.date > localToday())) await replanAll(rest)
+      await reload()
+    },
+    async setPriority(id) {
+      const list = events.map((x) => ({ ...x, priority: x.id === id }))
+      for (const x of events) if (x.priority && x.id !== id) await planStore.saveEvent({ ...x, priority: false })
+      await planStore.saveEvent(list.find((x) => x.id === id)!)
+      await replanAll(list)
       await reload()
     },
     async setStatus(w, status) {
