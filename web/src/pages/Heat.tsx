@@ -132,12 +132,12 @@ export function HeatCard({ workout, variant = 'card' }: { workout: PlanWorkout |
                 tap()
                 setPicked(h.time)
               }}
-              className={`flex min-h-16 min-w-11 flex-1 flex-col items-center justify-end gap-1 rounded-xl px-1 py-1.5 text-[11px] transition-colors ${active ? 'bg-surface-2 font-semibold text-ink' : 'text-ink-3'}`}
+              className={`flex min-h-16 min-w-11 flex-1 flex-col items-center justify-end gap-1 rounded-xl px-1 py-1.5 text-xs transition-colors ${active ? 'bg-surface-2 font-semibold text-ink' : 'text-ink-3'}`}
             >
               <span className="text-ink">{Math.round(h.temp)}°</span>
               <span className="w-full rounded-full" style={{ height: 4 + Math.min(h.pct, 10) * 2.4, background: LEVEL_COLOR[heatLevel(h.pct)] }} />
               <span>{Number(h.time.slice(11, 13))}</span>
-              <span className="h-3 text-[10px] leading-3 text-ink-3">{h.time === firstTomorrow ? 'morgen' : ''}</span>
+              <span className="h-3 text-xs leading-3 text-ink-3">{h.time === firstTomorrow ? 'morgen' : ''}</span>
             </button>
           )
         })}
@@ -189,7 +189,7 @@ export function HeatCard({ workout, variant = 'card' }: { workout: PlanWorkout |
         <div className="space-y-3 pb-1">
           {HEAT_EVIDENCE.map((e) => (
             <div key={e.title}>
-              <div className="text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{e.title}</div>
+              <div className="text-xs font-semibold tracking-wide text-ink-3 uppercase">{e.title}</div>
               <p className="mt-1 text-sm text-ink-2">{e.text}</p>
               <p className="mt-1 text-xs text-ink-3">Quellen: {e.source}</p>
             </div>

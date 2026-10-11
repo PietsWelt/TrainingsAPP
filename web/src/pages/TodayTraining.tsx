@@ -41,7 +41,7 @@ export function WeekCard({ activities, monday, km, hours }: { activities: Activi
                 d.parts[g] ? <div key={g} style={{ height: `${(d.parts[g] / max) * 100}%`, background: GROUP_COLOR[g] }} /> : null,
               )}
             </div>
-            <span className={`text-[11px] ${d.date === today ? 'font-bold text-ink' : 'text-ink-3'}`}>{d.label}</span>
+            <span className={`text-xs ${d.date === today ? 'font-bold text-ink' : 'text-ink-3'}`}>{d.label}</span>
           </div>
         ))}
       </div>
@@ -68,7 +68,7 @@ export function RecordsCard({ records, activities, onOpen }: { records: Best[]; 
                 {fresh && <Pill color="var(--good)">Neu</Pill>}
               </div>
               <div className="mt-1.5 text-[22px] leading-none font-semibold tracking-tight">{r ? fmtTime(r.time_s) : '–'}</div>
-              <div className="mt-1.5 text-[11px] text-ink-3">{r ? `${fmtPace(r.time_s, r.meters)}${r.date ? ` · ${dateLabel(r.date, { month: 'short', year: '2-digit' })}` : ''}` : 'Noch kein Lauf'}</div>
+              <div className="mt-1.5 text-xs text-ink-3">{r ? `${fmtPace(r.time_s, r.meters)}${r.date ? ` · ${dateLabel(r.date, { month: 'short', year: '2-digit' })}` : ''}` : 'Noch kein Lauf'}</div>
             </>
           )
           return linked ? (

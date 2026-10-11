@@ -22,6 +22,9 @@ export function Sheet({ title, onClose, children, footer }: { title?: string; on
     <div className="fade-in fixed inset-0 z-30 hidden bg-[rgb(10_8_30/0.35)] lg:block" onClick={onClose} aria-hidden />
     <div
       className="sheet-in sheet-panel fixed inset-0 z-30 flex flex-col bg-bg"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title ?? 'Details'}
       style={dx ? { transform: `translateX(${dx}px)`, transition: 'none' } : undefined}
       onTouchStart={(e) => {
         const t = e.touches[0]
@@ -44,15 +47,15 @@ export function Sheet({ title, onClose, children, footer }: { title?: string; on
         setDx(0)
       }}
     >
-      <header className="glass flex items-center border-b border-line px-1 pb-1" style={{ paddingTop: 'max(env(safe-area-inset-top), 6px)' }}>
+      <div className="glass flex items-center border-b border-line px-1 pb-1" style={{ paddingTop: 'max(env(safe-area-inset-top), 6px)' }}>
         <button onClick={onClose} className="flex min-h-11 items-center gap-1 rounded-lg px-3 text-[17px] text-accent">
           <svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M10 2 2 10l8 8" />
           </svg>
           Zurück
         </button>
-        {title && <span className="truncate pr-4 text-[17px] font-semibold">{title}</span>}
-      </header>
+        {title && <h2 className="truncate pr-4 font-sans text-[17px] font-semibold tracking-normal">{title}</h2>}
+      </div>
       <div className="flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto w-full max-w-xl space-y-3 p-4 pb-8">{children}</div>
       </div>

@@ -130,7 +130,7 @@ export function ActivityDetail({ activity: a, onClose }: { activity: Activity; o
             [g === 'bike' ? 'Tempo' : 'Pace', speed(a.avg_speed_mps, a.sport)],
           ].map(([k, v]) => (
             <div key={k} className="card px-3 py-3">
-              <div className="text-[11px] text-ink-3">{k}</div>
+              <div className="text-xs text-ink-3">{k}</div>
               <div className="mt-0.5 text-[17px] font-semibold tracking-tight">{v}</div>
             </div>
           ))}

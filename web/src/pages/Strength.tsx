@@ -205,12 +205,12 @@ export function GymCard({ workouts, log, today }: { workouts: PlanWorkout[]; log
             <div className="mt-0.5 text-xs text-ink-2">
               {legs.title.replace('Beine: ', '')} · {legs.minutes} min
             </div>
-            {legsHint && <div className="mt-1 text-[11px] text-ink-3">{legsHint}</div>}
+            {legsHint && <div className="mt-1 text-xs text-ink-3">{legsHint}</div>}
           </button>
           <button onClick={() => setOpen('upper')} className="press-row rounded-2xl bg-surface-2 p-3 text-left">
             <div className="text-[15px] font-semibold">Oberkörper</div>
             <div className="mt-0.5 text-xs text-ink-2">Muskelaufbau · {upperSession(upper, s.phase).minutes} min</div>
-            <div className="mt-1 text-[11px] text-ink-3">
+            <div className="mt-1 text-xs text-ink-3">
               Variante {upper}
               {upperNext ? ` · Vorschlag: ${upperNext === today ? 'heute' : wd(mondayOf(today), upperNext)}` : ''}
             </div>
@@ -461,7 +461,7 @@ export function StrengthSheet({ which, week, done, today, log, onClose }: { whic
         <div className="space-y-3">
           {(which === 'upper' ? UPPER_EVIDENCE : STRENGTH_EVIDENCE).map((e) => (
             <div key={e.title}>
-              <div className="text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{e.title}</div>
+              <div className="text-xs font-semibold tracking-wide text-ink-3 uppercase">{e.title}</div>
               <p className="mt-1 text-sm text-ink-2">{e.text}</p>
               <p className="mt-1 text-xs text-ink-3">Quellen: {e.source}</p>
             </div>

@@ -107,7 +107,7 @@ function GapBar({ goal, pred }: { goal: number; pred: number }) {
         <span className="absolute -top-1 h-4 w-1 -translate-x-1/2 rounded-full bg-ink" style={{ left: x(goal) }} title="Ziel" />
         <span className="absolute -top-1.5 h-5 w-5 -translate-x-1/2 rounded-full border-4 border-surface bg-accent" style={{ left: x(pred) }} title="Prognose" />
       </div>
-      <div className="mt-2 flex justify-between text-[11px] text-ink-3">
+      <div className="mt-2 flex justify-between text-xs text-ink-3">
         <span>schneller</span>
         <span>
           {diff === 0 ? 'genau im Ziel' : `${fmtDuration(Math.abs(diff))} ${diff > 0 ? 'langsamer' : 'schneller'} als dein Ziel`}

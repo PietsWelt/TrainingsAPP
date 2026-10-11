@@ -13,7 +13,7 @@ export function ZoneBar({ zones }: { zones: (number | null)[] }) {
           z ? <div key={i} className="rounded-full" style={{ width: `${(z / total) * 100}%`, background: ZONE_COLORS[i] }} title={`Zone ${i + 1}: ${Math.round((z / total) * 100)} %`} /> : null,
         )}
       </div>
-      <div className="mt-2 grid grid-cols-5 text-center text-[11px] text-ink-2">
+      <div className="mt-2 grid grid-cols-5 text-center text-xs text-ink-2">
         {zones.map((z, i) => (
           <div key={i}>
             <div className="font-medium text-ink">{Math.round(((z ?? 0) / total) * 100)}%</div>

@@ -97,7 +97,7 @@ function Spark({ values, unit }: { values: number[]; unit: string }) {
           {num(values.at(-1)!)}
           {unit}
         </div>
-        <div className="text-[11px] tabular-nums" style={{ color: change > 0 ? 'var(--good)' : 'var(--ink-3)' }}>
+        <div className="text-xs tabular-nums" style={{ color: change > 0 ? 'var(--good)' : 'var(--ink-3)' }}>
           {change > 0 ? '+' : ''}
           {num(change)}
           {unit} seit Start
