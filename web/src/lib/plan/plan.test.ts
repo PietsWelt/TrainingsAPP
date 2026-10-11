@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoComplete, coverage, fillSteps, isPartial, giveFeedback, legsProposal, progressOf, readinessProposal, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
+import { autoComplete, coverage, fillSteps, isPartial, giveFeedback, legsProposal, progressOf, readinessProposal, refreshHrTargets, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
 import { stepLines } from './labels'
 import { deloadWeeks, generatePlan, longCapKm, LONG_MAX_MIN, MAX_GAIN, pacesFor, paceSchedule, peakKm, phasesFor, planThreshold, volumesFor } from './generate'
@@ -436,5 +436,42 @@ describe('Spitzenumfang nach Zeit', () => {
     expect(peakKm('marathon', pacesFor('marathon', 16200))).toBeLessThan(75)
     expect(peakKm('marathon', pacesFor('marathon', 10800))).toBe(85)
     expect(peakKm('marathon', null)).toBe(85)
+  })
+})
+
+describe('Puls-Ziele für lockere Läufe', () => {
+  const flat = (ws: PlanWorkout[]) => ws.flatMap((w) => (w.steps ?? []).flatMap((s) => (s.type === 'repeat' ? s.steps : [s])).map((s) => ({ w, s })))
+
+  it('setzt mit aerober Schwelle Puls-Grenzen auf ruhige Schritte, nicht auf Tempo-Schritte', () => {
+    const plan = generatePlan(ev({ days_per_week: 7 }), { ...fit, aetHr: 148 }, TODAY, id)
+    const steps = flat(plan)
+    const easy = steps.filter(({ w, s }) => w.kind === 'easy' && s.type === 'run')
+    expect(easy.length).toBeGreaterThan(0)
+    for (const { s } of easy) expect([s.hr_low, s.hr_high]).toEqual([128, 148])
+    const rec = steps.filter(({ w }) => w.kind === 'recovery')
+    expect(rec.length).toBeGreaterThan(0)
+    for (const { s } of rec) expect([s.hr_low, s.hr_high, s.pace]).toEqual([118, 138, undefined])
+    for (const { s } of steps.filter(({ s }) => s.pace != null && s.pace_slow == null)) expect(s.hr_low).toBeUndefined()
+    expect(plan.find((w) => w.kind === 'easy')!.description).toContain('Puls 128–148')
+  })
+
+  it('setzt ohne aerobe Schwelle keine Puls-Grenzen', () => {
+    const plan = generatePlan(ev({ days_per_week: 7 }), fit, TODAY, id)
+    expect(flat(plan).some(({ s }) => s.hr_low != null)).toBe(false)
+  })
+
+  it('passt künftige Puls-Ziele erst ab 3 Schlägen Unterschied an und ergänzt ältere Pläne', () => {
+    const plan = generatePlan(ev(), { ...fit, aetHr: 148 }, TODAY, id)
+    expect(refreshHrTargets(plan, 150, TODAY)).toEqual([])
+    const changed = refreshHrTargets(plan, 152, TODAY)
+    expect(changed.length).toBeGreaterThan(0)
+    const easy = changed.find((w) => w.kind === 'easy')!
+    expect(easy.description).toContain('Puls 132–152')
+    expect(easy.description).not.toContain('Puls 128–148')
+    // Älterer Plan ohne Puls-Ziele: werden ergänzt
+    const old = generatePlan(ev(), fit, TODAY, id)
+    const added = refreshHrTargets(old, 148, TODAY)
+    expect(flat(added).filter(({ s }) => s.pace_slow != null).every(({ s }) => s.hr_high === 148)).toBe(true)
+    expect(stepLines(added.find((w) => w.kind === 'easy')!.steps!)[0]).toContain('Puls 128–148')
   })
 })

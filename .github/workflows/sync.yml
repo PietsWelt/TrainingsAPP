@@ -36,5 +36,6 @@ jobs:
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
           WATCH_DAYS: ${{ vars.WATCH_DAYS || '7' }}
+          WATCH_EASY_TARGET: ${{ vars.WATCH_EASY_TARGET || 'hr' }}
           SYNC_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger || 'schedule' }}
         run: python sync.py

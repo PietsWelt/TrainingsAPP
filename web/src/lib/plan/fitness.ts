@@ -1,4 +1,5 @@
 import { sportGroup } from '../format'
+import { personalAet } from '../aet'
 import type { Best } from '../records'
 import type { Activity, GarminLactate } from '../types'
 import { thresholdAnchor } from './anchor'
@@ -26,5 +27,8 @@ export function fitnessFrom(activities: Activity[], today: string, records?: Bes
       if (a.local_date > addDays(today, -30)) longest = Math.max(longest, km)
     }
   }
-  return { weeklyRunKm: runKm, longestRunKm: longest, weeklyHours: hours, threshold: thresholdAnchor(activities, records, lactate, today) }
+  // Aerobe Schwelle nur aus mindestens 3 Brustgurt-Läufen, die neueste Schätzung höchstens 90 Tage alt.
+  const aet = personalAet(activities, today)
+  const aetHr = aet && aet.n >= 3 && aet.date >= addDays(today, -90) ? aet.hr : null
+  return { weeklyRunKm: runKm, longestRunKm: longest, weeklyHours: hours, threshold: thresholdAnchor(activities, records, lactate, today), aetHr }
 }

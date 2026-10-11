@@ -254,9 +254,23 @@ const jog = (x: Omit<WorkStep, 'type'>): WorkStep => ({ type: 'recover', note: '
 const repeat = (times: number, ...steps: WorkStep[]): RepeatStep => ({ type: 'repeat', times, steps })
 const pz = (z: Exclude<Zone, 'easy'>, p: Paces | null) => (p ? Math.round(p[z]) : undefined)
 const easyPace = (p: Paces | null) => (p ? { pace: Math.round(p.easy[0]), pace_slow: Math.round(p.easy[1]) } : {})
+
+/**
+ * Puls-Bereich für ruhige Abschnitte aus der aeroben Schwelle (AeT). Locker und lang: AeT − 20 bis AeT,
+ * passend zur Auswertung (zu hart ab AeT + 5, zu leicht unter AeT − 20). Regeneration: AeT − 30 bis AeT − 10.
+ */
+export function hrRange(aet: number, recovery = false): { hr_low: number; hr_high: number } {
+  return recovery ? { hr_low: aet - 30, hr_high: aet - 10 } : { hr_low: aet - 20, hr_high: aet }
+}
+const easyTarget = (p: Paces | null, aet: number | null | undefined) => ({ ...easyPace(p), ...(aet ? hrRange(aet) : {}) })
+export const hrText = (aet: number | null | undefined, recovery = false) => {
+  if (!aet) return ''
+  const r = hrRange(aet, recovery)
+  return ` Puls ${r.hr_low}–${r.hr_high}${recovery ? '' : ', das Tempo ist nur Orientierung'}.`
+}
 const meters = (km: number) => Math.round(km * 10) * 100
 
-function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null): Draft {
+function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null, aet?: number | null): Draft {
   const short = type === '5k' || type === '10k'
   const base = { sport: 'run' as Sport, distance_km: r1(km), duration_min: runMinutes(km, p, 0.92), key_session: true }
   const wu = 'Ein- und Auslaufen je 10–15 min locker.'
@@ -265,8 +279,8 @@ function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: num
     kind: 'strides',
     key_session: false,
     title: 'Lockerer Lauf mit Steigerungen',
-    description: `Locker (${at('easy', p)}), am Ende ${n} × 20 s Steigerungen.`,
-    steps: [work({ m: Math.max(1000, meters(km - 0.5)), note: 'Locker', ...easyPace(p) }), repeat(n, work({ time_s: 20, note: 'Steigerung' }), jog({ time_s: 60 })), CD],
+    description: `Locker (${at('easy', p)}), am Ende ${n} × 20 s Steigerungen.${hrText(aet)}`,
+    steps: [work({ m: Math.max(1000, meters(km - 0.5)), note: 'Locker', ...easyTarget(p, aet) }), repeat(n, work({ time_s: 20, note: 'Steigerung' }), jog({ time_s: 60 })), CD],
   })
   if (phase === 'base') {
     if (slot === 'Q1') {
@@ -377,43 +391,50 @@ export function longCapKm(type: RunEventType, p: Paces | null): number {
 
 const fmtHours = (min: number) => (min % 60 ? `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')} h` : `${min / 60} h`)
 
-function runLong(type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null, capped = false): Draft {
+function runLong(type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null, capped = false, aet?: number | null): Draft {
   let description = `Ruhig und gleichmäßig (${at('easy', p)}).`
   let steps: Step[] | undefined
   const total = meters(km)
-  steps = p ? [work({ m: total, note: 'Ruhig', ...easyPace(p) })] : undefined
+  steps = p || aet ? [work({ m: total, note: 'Ruhig', ...easyTarget(p, aet) })] : undefined
   if (phase === 'build' && type !== '5k') {
     description += ' Die letzten 2 km etwas zügiger.'
-    steps = [work({ m: Math.max(1000, total - 2000), note: 'Ruhig', ...easyPace(p) }), work({ m: 2000, note: 'Etwas zügiger' })]
+    steps = [work({ m: Math.max(1000, total - 2000), note: 'Ruhig', ...easyTarget(p, aet) }), work({ m: 2000, note: 'Etwas zügiger' })]
   }
   if (phase === 'peak' && type === 'marathon') {
     const fast = 6 + 2 * Math.min(pw, 2)
     description = `Ruhig beginnen, die letzten ${fast} km im ${at('marathon', p)}.`
-    steps = [work({ m: Math.max(1000, total - fast * 1000), note: 'Ruhig', ...easyPace(p) }), work({ m: fast * 1000, pace: pz('marathon', p), note: 'Marathontempo' })]
+    steps = [work({ m: Math.max(1000, total - fast * 1000), note: 'Ruhig', ...easyTarget(p, aet) }), work({ m: fast * 1000, pace: pz('marathon', p), note: 'Marathontempo' })]
   }
   if (phase === 'peak' && type === 'half') {
     description = `Ruhig beginnen, die letzten 4 km im ${at('race', p)}.`
-    steps = [work({ m: Math.max(1000, total - 4000), note: 'Ruhig', ...easyPace(p) }), work({ m: 4000, pace: pz('race', p), note: 'Wettkampftempo' })]
+    steps = [work({ m: Math.max(1000, total - 4000), note: 'Ruhig', ...easyTarget(p, aet) }), work({ m: 4000, pace: pz('race', p), note: 'Wettkampftempo' })]
   }
+  description += hrText(aet)
   if (capped) description += ` Höchstens ${fmtHours(LONG_MAX_MIN[type])}, auch wenn du dafür nicht die volle Strecke schaffst.`
   return { sport: 'run', kind: 'long', title: 'Langer Lauf', description, distance_km: r1(km), duration_min: runMinutes(km, p, 1.03), key_session: true, steps }
 }
 
-function runEasy(km: number, p: Paces | null, recovery = false): Draft {
+function runEasy(km: number, p: Paces | null, recovery = false, aet?: number | null): Draft {
   return {
     sport: 'run',
     kind: recovery ? 'recovery' : 'easy',
     title: recovery ? 'Regenerationslauf' : 'Lockerer Lauf',
-    description: recovery ? 'Sehr locker, Zone 1. Lieber zu langsam als zu schnell.' : `Locker (${at('easy', p)}). Du solltest dich unterhalten können.`,
+    description: (recovery ? 'Sehr locker, Zone 1. Lieber zu langsam als zu schnell.' : `Locker (${at('easy', p)}). Du solltest dich unterhalten können.`) + hrText(aet, recovery),
     distance_km: r1(km),
     duration_min: runMinutes(km, p, recovery ? 1.08 : 1),
     key_session: false,
-    // Regeneration ohne Tempovorgabe: lieber langsamer als die Uhr verlangt.
-    steps: p && !recovery ? [work({ m: meters(km), note: 'Locker', ...easyPace(p) })] : undefined,
+    // Regeneration ohne Tempovorgabe: lieber langsamer als die Uhr verlangt. Mit Schwelle gibt es ein Puls-Ziel.
+    steps: recovery
+      ? aet
+        ? [work({ m: meters(km), note: 'Sehr locker', ...hrRange(aet, true) })]
+        : undefined
+      : p || aet
+        ? [work({ m: meters(km), note: 'Locker', ...easyTarget(p, aet) })]
+        : undefined,
   }
 }
 
-function runWeek(type: RunEventType, phase: Phase, pw: number, km: number, roles: RunRole[], p: Paces | null, longCap = Infinity): Map<RunRole, Draft> {
+function runWeek(type: RunEventType, phase: Phase, pw: number, km: number, roles: RunRole[], p: Paces | null, longCap = Infinity, aet?: number | null): Map<RunRole, Draft> {
   const spec = RUN[type]
   const qCount = roles.filter((r) => r === 'Q1' || r === 'Q2').length
   const wanted = Math.min(longCap, spec.longMax, Math.max(spec.longMin * (phase === 'taper' ? 0.7 : 1), km * 0.3))
@@ -424,11 +445,11 @@ function runWeek(type: RunEventType, phase: Phase, pw: number, km: number, roles
   // Ein lockerer Lauf soll nie länger als ~70 % des langen Laufs werden; bei wenigen Tagen sinkt dann der Wochenumfang.
   const easy = easyRoles ? Math.min(long * 0.7, Math.max(4, (km - long - q * qCount) / easyRoles)) : 0
   const m = new Map<RunRole, Draft>()
-  m.set('Q1', runQuality('Q1', type, phase, pw, q, p))
-  m.set('Q2', runQuality('Q2', type, phase, pw, q, p))
-  m.set('L', runLong(type, phase, pw, long, p, wanted > timeCap))
-  m.set('E', runEasy(easy, p))
-  m.set('R', runEasy(Math.min(easy, 6), p, true))
+  m.set('Q1', runQuality('Q1', type, phase, pw, q, p, aet))
+  m.set('Q2', runQuality('Q2', type, phase, pw, q, p, aet))
+  m.set('L', runLong(type, phase, pw, long, p, wanted > timeCap, aet))
+  m.set('E', runEasy(easy, p, false, aet))
+  m.set('R', runEasy(Math.min(easy, 6), p, true, aet))
   return m
 }
 
@@ -627,7 +648,7 @@ export function generatePlan(event: RaceEvent, fitness: Fitness, today: string, 
       for (const [day, role] of layout) push(addDays(monday, day), w + 1, phase, drafts.get(role)!)
     } else {
       const layout = rotate(RUN_TEMPLATES[dpw], 6, event.long_day)
-      const drafts = runWeek(event.type as RunEventType, phase, pw, volumes[w], layout.map(([, r]) => r), pacesAt(w), longest > 0 ? longest * 1.1 : Infinity)
+      const drafts = runWeek(event.type as RunEventType, phase, pw, volumes[w], layout.map(([, r]) => r), pacesAt(w), longest > 0 ? longest * 1.1 : Infinity, fitness.aetHr)
       if (layout.some(([, r]) => r === 'L')) longest = Math.max(longest, drafts.get('L')!.distance_km ?? 0)
       for (const [day, role] of layout) push(addDays(monday, day), w + 1, phase, drafts.get(role)!)
     }

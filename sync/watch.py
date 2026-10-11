@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from datetime import date, timedelta
 from typing import Any
 
@@ -35,14 +36,35 @@ DISTANCE = {"conditionTypeId": 3, "conditionTypeKey": "distance"}
 ITERATIONS = {"conditionTypeId": 7, "conditionTypeKey": "iterations"}
 NO_TARGET = {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target"}
 PACE = {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "pace.zone"}
+# Eigener Puls-Bereich: targetValueOne/-Two in bpm, ohne Zonennummer.
+HEART_RATE = {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"}
 PACE_WINDOW_S = 5  # ± Sekunden pro km um das Zieltempo
 
 COLS = "id,date,sport,title,description,duration_min,distance_km,steps,status,garmin_workout_id,garmin_hash"
 
 
+def easy_target() -> str:
+    """Repo-Variable WATCH_EASY_TARGET: ``hr`` (Standard) = Puls-Ziel für ruhige Abschnitte, ``pace`` = Tempo."""
+    return "pace" if os.getenv("WATCH_EASY_TARGET", "hr").strip().lower() == "pace" else "hr"
+
+
+def _has_hr(steps: list[dict[str, Any]] | None) -> bool:
+    for s in steps or []:
+        if s.get("type") == "repeat":
+            if _has_hr(s.get("steps")):
+                return True
+        elif s.get("hr_low") and s.get("hr_high"):
+            return True
+    return False
+
+
 def fingerprint(row: dict[str, Any]) -> str:
     keys = ("date", "sport", "title", "description", "duration_min", "distance_km", "steps")
-    raw = json.dumps({k: row.get(k) for k in keys}, sort_keys=True, ensure_ascii=False)
+    data = {k: row.get(k) for k in keys}
+    # Umschalten zwischen Puls und Tempo soll Einheiten mit Puls-Ziel neu übertragen.
+    if _has_hr(row.get("steps")):
+        data["easy_target"] = easy_target()
+    raw = json.dumps(data, sort_keys=True, ensure_ascii=False)
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
@@ -53,9 +75,10 @@ def _short(text: str | None, n: int) -> str | None:
 
 
 class _Builder:
-    def __init__(self, with_targets: bool) -> None:
+    def __init__(self, with_targets: bool, use_hr: bool) -> None:
         self.order = 0
         self.with_targets = with_targets
+        self.use_hr = use_hr
 
     def step(self, s: dict[str, Any]) -> dict[str, Any]:
         self.order += 1
@@ -77,7 +100,12 @@ class _Builder:
         if end is DISTANCE:
             out["preferredEndConditionUnit"] = {"unitKey": "kilometer" if value >= 1000 else "meter"}
         pace = s.get("pace")
-        if pace and self.with_targets:
+        if self.with_targets and self.use_hr and s.get("hr_low") and s.get("hr_high"):
+            # Puls-Ziel hat Vorrang: Bei Hitze oder am Berg piepst die Uhr dann nicht, solange der Puls passt.
+            out["targetType"] = HEART_RATE
+            out["targetValueOne"] = float(s["hr_low"])
+            out["targetValueTwo"] = float(s["hr_high"])
+        elif pace and self.with_targets:
             # Garmin erwartet Geschwindigkeiten in m/s: langsame Grenze zuerst.
             slow = s.get("pace_slow") or pace + PACE_WINDOW_S
             fast = pace if s.get("pace_slow") else max(60, pace - PACE_WINDOW_S)
@@ -111,7 +139,7 @@ def _drop_none(x: Any) -> Any:
     return x
 
 
-def garmin_workout(row: dict[str, Any], with_targets: bool = True) -> dict[str, Any] | None:
+def garmin_workout(row: dict[str, Any], with_targets: bool = True, use_hr: bool | None = None) -> dict[str, Any] | None:
     """Baut das Garmin-Workout-JSON für eine Einheit. None für Sportarten ohne Uhr-Export."""
     sport = SPORTS.get(row["sport"])
     if not sport:
@@ -125,7 +153,7 @@ def garmin_workout(row: dict[str, Any], with_targets: bool = True) -> dict[str, 
         elif row.get("duration_min"):
             single["time_s"] = int(row["duration_min"]) * 60
         steps = [single]
-    b = _Builder(with_targets)
+    b = _Builder(with_targets, easy_target() == "hr" if use_hr is None else use_hr)
     workout: dict[str, Any] = {
         "workoutName": _short(PREFIX + row["title"], 80),
         "description": _short(row.get("description"), 500),
@@ -147,11 +175,19 @@ def _delete(client: Any, workout_id: int) -> None:
 
 
 def _upload(client: Any, row: dict[str, Any]) -> int:
-    try:
-        res = client.upload_workout(garmin_workout(row))
-    except Exception as e:  # noqa: BLE001
-        log.warning("Upload mit Zieltempo abgelehnt (%s), versuche ohne.", type(e).__name__)
-        res = client.upload_workout(garmin_workout(row, with_targets=False))
+    attempts: list[tuple[str, dict[str, Any]]] = [("mit Zielen", {})]
+    if _has_hr(row.get("steps")) and easy_target() == "hr":
+        attempts.append(("mit Tempo statt Puls", {"use_hr": False}))
+    attempts.append(("ohne Ziele", {"with_targets": False}))
+    res = None
+    for i, (label, kwargs) in enumerate(attempts):
+        try:
+            res = client.upload_workout(garmin_workout(row, **kwargs))
+            break
+        except Exception as e:  # noqa: BLE001
+            if i == len(attempts) - 1:
+                raise
+            log.warning("Upload %s abgelehnt (%s), nächster Versuch: %s.", label, type(e).__name__, attempts[i + 1][0])
     workout_id = int(res["workoutId"])
     client.schedule_workout(workout_id, row["date"])
     return workout_id
