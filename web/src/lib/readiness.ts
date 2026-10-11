@@ -1,6 +1,7 @@
 // Eigener Readiness-Score (0–100) aus HRV, Ruhepuls, Schlaf, Trainingslast und Alkohol.
 // Jeder Baustein wird gegen deine eigene Norm der letzten 4 Wochen bewertet, nicht gegen Tabellenwerte.
 
+import { fitnessSeries, formOn, formPct, type FitnessDay } from './fitness'
 import { addDays } from './plan/dates'
 import type { GymByDate } from './dailyLog'
 import type { Activity, DailyMetrics } from './types'
@@ -62,24 +63,54 @@ export function loadOf(a: Activity): number {
   return ((a.duration_s ?? 0) / 60) * 1.2
 }
 
+/** Punkte für die Last aus der Form in Prozent der Fitness (Einteilung wie intervals.icu). */
+export function formScore(pct: number): number {
+  return pct > -10 ? 85 : pct >= -30 ? 65 : pct >= -40 ? 45 : 30
+}
+
+/**
+ * HRV-Punkte aus Garmins 7-Tage-Schnitt gegen deinen Normalbereich (dieselben Werte wie in Trends).
+ * Im Bereich 70–90 je nach Lage, darunter abwärts je Bereichsbreite (mindestens 15), darüber 85.
+ */
+export function hrvWeekScore(avg: number, low: number, high: number): number {
+  const width = Math.max(1, high - low)
+  if (avg < low) return Math.max(15, 70 - ((low - avg) / width) * 40)
+  if (avg > high) return 85
+  return 70 + ((avg - low) / width) * 20
+}
+
 export function readinessFor(
   date: string,
   days: DailyMetrics[],
   activities: Activity[],
   drinksByDate: Record<string, number>,
   gymByDate: GymByDate = {},
+  form?: FitnessDay,
 ): Readiness | null {
   const byDate = new Map(days.map((d) => [d.date, d]))
   const today = byDate.get(date)
   const history = days.filter((d) => d.date < date && d.date >= addDays(date, -28))
   const comps: Component[] = []
 
-  // HRV: Abweichung von deiner 4-Wochen-Norm in Standardabweichungen.
+  // HRV: Hauptsignal ist Garmins 7-Tage-Schnitt gegen deinen Normalbereich. Die letzte Nacht zählt
+  // nur als Zusatz, damit eine einzelne schlechte Nacht den Wert nicht springen lässt.
   const hrvHist = nums(history.map((d) => d.hrv_last_night))
   const hrv = today?.hrv_last_night
   const hrvMean = mean(hrvHist)
   const hrvSd = sd(hrvHist)
-  if (hrv != null && hrvMean != null && hrvSd) {
+  const wk = today?.hrv_weekly_avg
+  const lo = today?.hrv_baseline_low
+  const hi = today?.hrv_baseline_high
+  if (wk != null && lo != null && hi != null && hi > lo) {
+    let score = hrvWeekScore(wk, lo, hi)
+    let detail = `7-Tage-Schnitt ${wk} ms, Normalbereich ${lo}–${hi} ms`
+    if (hrv != null && hrvMean != null && hrvSd && (hrv - hrvMean) / Math.max(hrvSd, 2) < -1.5) {
+      score -= 10
+      detail += `, letzte Nacht deutlich tiefer (${hrv} ms)`
+    }
+    comps.push({ key: 'hrv', label: 'HRV', score: clamp(Math.round(score)), weight: WEIGHTS.hrv, detail })
+  } else if (hrv != null && hrvMean != null && hrvSd) {
+    // Ohne Garmins Wochenwerte: Abweichung der letzten Nacht von deiner 4-Wochen-Norm.
     const z = (hrv - hrvMean) / Math.max(hrvSd, 2)
     const pct = Math.round(((hrv - hrvMean) / hrvMean) * 100)
     comps.push({
@@ -122,7 +153,8 @@ export function readinessFor(
     })
   }
 
-  // Trainingslast: akut (7 Tage) im Verhältnis zur chronischen Last (28 Tage), plus harter Vortag.
+  // Trainingslast: Form (Fitness minus Ermüdung) in Prozent der Fitness, wie in Trends, plus harter Vortag.
+  // Solange die Fitness noch zu klein ist: akute (7 Tage) gegen chronische Last (28 Tage).
   const recent = activities.filter((a) => a.local_date < date && a.local_date >= addDays(date, -28))
   if (recent.length >= 3) {
     const acute = recent.filter((a) => a.local_date >= addDays(date, -7)).reduce((s, a) => s + loadOf(a), 0)
@@ -130,16 +162,19 @@ export function readinessFor(
     const ratio = chronic > 0 ? acute / chronic : 1
     const yesterday = recent.filter((a) => a.local_date === addDays(date, -1)).reduce((s, a) => s + loadOf(a), 0)
     const hardYesterday = chronic > 0 && yesterday > chronic / 3
-    let score = ratio <= 1.1 ? 85 : ratio <= 1.3 ? 70 : ratio <= 1.5 ? 50 : 30
-    if (ratio < 0.6) score = 90
+    const pct = formPct(form ?? formOn(activities, date))
+    let score: number
+    let detail: string
+    if (pct != null) {
+      score = formScore(pct)
+      detail = `Form ${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct)} %: ${pct < -10 ? 'Die Ermüdung liegt über deiner Fitness' : pct < 0 ? 'leicht ermüdet' : 'erholt'}`
+    } else {
+      score = ratio <= 1.1 ? 85 : ratio <= 1.3 ? 70 : ratio <= 1.5 ? 50 : 30
+      if (ratio < 0.6) score = 90
+      detail = `Letzte 7 Tage ${Math.round(ratio * 100)} % deines Schnitts`
+    }
     if (hardYesterday) score -= 15
-    comps.push({
-      key: 'load',
-      label: 'Trainingslast',
-      score: clamp(score),
-      weight: WEIGHTS.load,
-      detail: `Letzte 7 Tage ${Math.round(ratio * 100)} % deines Schnitts${hardYesterday ? ', gestern hart' : ''}`,
-    })
+    comps.push({ key: 'load', label: 'Trainingslast', score: clamp(score), weight: WEIGHTS.load, detail: `${detail}${hardYesterday ? ', gestern hart' : ''}` })
   }
 
   // Alkohol am Vorabend (nur wenn eingetragen).
@@ -185,5 +220,10 @@ export function readinessFor(
 
 /** Readiness für jeden Tag der Liste (für den Verlauf in Trends). */
 export function readinessSeries(days: DailyMetrics[], activities: Activity[], drinksByDate: Record<string, number>, gymByDate: GymByDate = {}) {
-  return days.map((d) => ({ date: d.date, value: readinessFor(d.date, days, activities, drinksByDate, gymByDate)?.score ?? null }))
+  if (!days.length) return []
+  // Die Form-Reihe einmal rechnen, nicht für jeden Tag neu.
+  const first = days.reduce((m, d) => (d.date < m ? d.date : m), days[0].date)
+  const last = days.reduce((m, d) => (d.date > m ? d.date : m), days[0].date)
+  const forms = new Map(fitnessSeries(activities, [], first, last, last).map((f) => [f.date, f]))
+  return days.map((d) => ({ date: d.date, value: readinessFor(d.date, days, activities, drinksByDate, gymByDate, forms.get(d.date))?.score ?? null }))
 }

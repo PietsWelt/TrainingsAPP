@@ -76,6 +76,16 @@ export function fitnessSeries(activities: Activity[], planned: PlanWorkout[], fr
   return out
 }
 
+/** Form in Prozent der Fitness (wie intervals.icu). null, solange die Fitness noch zu klein ist, um etwas zu sagen. */
+export function formPct(day: Pick<FitnessDay, 'fitness' | 'form'> | undefined): number | null {
+  return day && day.fitness >= 10 ? Math.round((day.form / day.fitness) * 100) : null
+}
+
+/** Form am Tag `date` (vor dessen Training), nur aus gemessenen Aktivitäten. */
+export function formOn(activities: Activity[], date: string): FitnessDay | undefined {
+  return fitnessSeries(activities, [], date, date, date)[0]
+}
+
 export type FormZone = { label: string; status: 'good' | 'warning' | 'serious'; text: string }
 
 /** Einordnung der Form, angelehnt an die üblichen Bereiche (intervals.icu). */

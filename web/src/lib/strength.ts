@@ -2,9 +2,11 @@
 // Keine festen Plan-Einheiten, sondern Vorschläge, die sich um die harten Laufeinheiten herum legen.
 // Kreuzheben ist bewusst nicht dabei; die hintere Kette trainieren Hip Thrust und Nordic Curls.
 
+import { getState } from './appState'
 import type { GymByDate, GymFocus } from './dailyLog'
 import { addDays } from './plan/dates'
 import type { Kind, Phase, PlanWorkout } from './plan/types'
+import type { Readiness } from './readiness'
 
 export type StabiLevel = 'easy' | 'medium' | 'hard'
 export const STABI_LEVELS: { value: StabiLevel; label: string }[] = [
@@ -42,7 +44,8 @@ const isKey = (w: PlanWorkout) => KEY_KINDS.includes(w.kind) || w.key_session
  * Vorschläge für die Woche ab `monday`. Erledigtes zählt aus dem Gym-Eintrag (Beine oder
  * Ganzkörper bzw. Core). Offenes wird nur auf Tage ab `today` gelegt, damit Verpasstes nachrückt.
  */
-export function weekStrength(monday: string, workouts: PlanWorkout[], gym: GymByDate, today: string): WeekStrength {
+/** `skip`: verschobene Krafttage als „Datum:legs“ bzw. „Datum:upper“ (aus app_state, siehe `strengthAdvice`). */
+export function weekStrength(monday: string, workouts: PlanWorkout[], gym: GymByDate, today: string, skip: string[] = getState<string[]>('strength.skip', [])): WeekStrength {
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
   const active = workouts.filter((w) => w.status !== 'skipped')
   const on = (d: string) => active.filter((w) => w.date === d)
@@ -65,7 +68,7 @@ export function weekStrength(monday: string, workouts: PlanWorkout[], gym: GymBy
   let legs: string | null = legsDone
   let legsAfterKey = false
   if (!legs) {
-    const ok = open.filter((d) => daysToRace(d) >= NO_LEGS_BEFORE_RACE && !races.includes(d))
+    const ok = open.filter((d) => daysToRace(d) >= NO_LEGS_BEFORE_RACE && !races.includes(d) && !skip.includes(`${d}:legs`))
     const score = (d: string) => {
       if (!hasPlan) return d === days[2] ? 3 : d === days[3] ? 2 : 1 // ohne Plan: Mitte der Woche
       let s = on(d).length === 0 ? 2 : 1
@@ -113,7 +116,7 @@ export function weekStrength(monday: string, workouts: PlanWorkout[], gym: GymBy
     return sc
   }
   const upperCandidates = open
-    .filter((d) => d !== legsDay && !upperDone.includes(d) && !races.includes(d) && daysToRace(d) >= 2)
+    .filter((d) => d !== legsDay && !upperDone.includes(d) && !races.includes(d) && daysToRace(d) >= 2 && !skip.includes(`${d}:upper`))
     .sort((a, b) => upperScore(b) - upperScore(a) || a.localeCompare(b))
   for (const d of upperCandidates) {
     if (upper.length - upperDone.length >= upperNeed) break
@@ -608,4 +611,23 @@ export function mergeFocus(current: GymFocus | undefined, add: 'legs' | 'upper')
 /** Name einer Gym-Übung für den Verlauf. */
 export function exerciseName(id: string): string {
   return [...LEG_EX, ...Object.values(UPPER_EX)].find((e) => e.id === id)?.name ?? id
+}
+
+export type StrengthAdvice =
+  | { action: 'ok' }
+  /** Heute lieber nicht: verschieben, Stabi geht als Alternative. */
+  | { action: 'move'; text: string }
+  /** Heute keine Kraft, nur Dehnen. */
+  | { action: 'rest'; text: string }
+
+/**
+ * Kraft passt sich der Readiness an: Beine bei „Eher locker“ verschieben (Stabi geht), bei „Erholung“
+ * weder Beine noch Oberkörper. Ab „Moderat“ wie geplant. Stabi bleibt immer möglich.
+ */
+export function strengthAdvice(which: 'legs' | 'upper' | 'stabi', r: Pick<Readiness, 'score' | 'status'> | null | undefined): StrengthAdvice {
+  if (!r || which === 'stabi') return { action: 'ok' }
+  const what = which === 'legs' ? 'Beintag' : 'Oberkörper'
+  if (r.status === 'critical') return { action: 'rest', text: `Heute lieber nicht: Readiness ${r.score}. Heute keine Kraft, nur Dehnen. ${what} auf einen späteren Tag?` }
+  if (r.status === 'serious' && which === 'legs') return { action: 'move', text: `Heute lieber nicht: Readiness ${r.score}. Beintag auf später? Stabi geht auch heute.` }
+  return { action: 'ok' }
 }

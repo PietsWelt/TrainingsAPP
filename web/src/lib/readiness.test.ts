@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addDays } from './plan/dates'
-import { alcoholScore, readinessFor, legFatigue } from './readiness'
+import { alcoholScore, formScore, readinessFor, legFatigue } from './readiness'
 import type { Activity, DailyMetrics } from './types'
 
 const D = '2026-10-02'
@@ -21,9 +21,10 @@ function history(today: Partial<DailyMetrics>): DailyMetrics[] {
   return out
 }
 
-function runs(perWeek = 4, load = 80, lastDayLoad?: number): Activity[] {
+// Läufe über 4 Monate, damit die Fitness (42 Tage) eingeschwungen ist wie in der App (180 Tage).
+function runs(perWeek = 4, load = 80, lastDayLoad?: number, days = 120): Activity[] {
   const out: Activity[] = []
-  for (let i = 28; i >= 1; i--) {
+  for (let i = days; i >= 1; i--) {
     if (i % Math.round(7 / perWeek) !== 0 && i !== 1) continue
     out.push({
       id: i, start_time: `${addDays(D, -i)}T07:00:00Z`, local_date: addDays(D, -i), sport: 'running', name: null, distance_m: 10000,
@@ -87,5 +88,35 @@ describe('legFatigue', () => {
     expect(legFatigue('2026-10-05', { '2026-10-03': { focus: 'legs', hard: true } })).toMatchObject({ score: 70, daysAgo: 2 })
     expect(legFatigue('2026-10-05', { '2026-10-03': { focus: 'legs', hard: false } })).toBeNull()
     expect(legFatigue('2026-10-05', { '2026-10-04': { focus: 'upper', hard: true } })).toBeNull()
+  })
+})
+
+describe('Readiness aus HRV-Wochenschnitt und Form', () => {
+  // Garmins Wochenwerte: Normalbereich 55–65 ms
+  const withWeek = (avg: number, today: Partial<DailyMetrics> = {}) =>
+    history(today).map((d) => ({ ...d, hrv_weekly_avg: avg, hrv_baseline_low: 55, hrv_baseline_high: 65 }))
+
+  it('lässt sich von einer einzelnen schlechten Nacht in einer guten Woche nicht unter 55 ziehen', () => {
+    const r = readinessFor(D, withWeek(61, { hrv_last_night: 38 }), runs(), {})!
+    expect(r.score).toBeGreaterThanOrEqual(55)
+    expect(r.components.find((c) => c.key === 'hrv')!.detail).toContain('letzte Nacht deutlich tiefer')
+  })
+
+  it('zieht unter 50, wenn die ganze Woche unter dem Normalbereich liegt', () => {
+    const days = withWeek(46, { sleep_s: 6.3 * 3600, sleep_score: 60 }).map((d) => (d.date > addDays(D, -7) ? { ...d, hrv_last_night: 45 } : d))
+    const r = readinessFor(D, days, runs(), {})!
+    expect(r.score).toBeLessThan(50)
+    expect(r.components.find((c) => c.key === 'hrv')!.detail).toBe('7-Tage-Schnitt 46 ms, Normalbereich 55–65 ms, letzte Nacht deutlich tiefer (45 ms)')
+  })
+
+  it('gibt für Form −35 % 45 Punkte bei der Last', () => {
+    expect(formScore(-35)).toBe(45)
+    expect(formScore(-5)).toBe(85)
+    expect(formScore(-20)).toBe(65)
+    expect(formScore(-45)).toBe(30)
+    const r = readinessFor(D, history({}), runs(), {}, {}, { date: D, fitness: 60, fatigue: 81, form: -21, projected: false })!
+    const load = r.components.find((c) => c.key === 'load')!
+    expect(load.score).toBe(45)
+    expect(load.detail).toBe('Form −35 %: Die Ermüdung liegt über deiner Fitness')
   })
 })
