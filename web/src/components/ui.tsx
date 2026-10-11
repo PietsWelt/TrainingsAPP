@@ -1,8 +1,11 @@
 import { useId, type ReactNode } from 'react'
 
-export function Card({ title, subtitle, action, children, className = '', hero = false }: { title?: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string; hero?: boolean }) {
+/** Variante einer „Heute“-Karte: eigene Karte, eingebettet in die Hauptkarte (ohne Hülle) oder als Zeile in „Noch offen“. */
+export type CardVariant = 'card' | 'embedded' | 'row'
+
+export function Card({ title, subtitle, action, children, className = '', hero = false, bare = false }: { title?: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string; hero?: boolean; bare?: boolean }) {
   return (
-    <section className={`card ${hero ? 'card-hero' : ''} ${/(^|\s)p-\d/.test(className) ? '' : 'p-4'} ${className}`}>
+    <section className={bare ? className : `card ${hero ? 'card-hero' : ''} ${/(^|\s)p-\d/.test(className) ? '' : 'p-4'} ${className}`}>
       {title && (
         <header className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -200,5 +203,34 @@ export function SportIcon({ group, size = 40 }: { group: 'run' | 'bike' | 'swim'
         <path d={path} />
       </svg>
     </span>
+  )
+}
+
+/** Eine Zeile in „Noch offen“: Symbol, Titel, Unterzeile; öffnet das zugehörige Blatt. `children` steht darunter. */
+export function TaskRow({ icon, color = 'var(--accent)', title, subtitle, done = false, onClick, children }: {
+  icon: ReactNode
+  color?: string
+  title: string
+  subtitle?: ReactNode
+  done?: boolean
+  onClick: () => void
+  children?: ReactNode
+}) {
+  return (
+    <div className="py-1.5">
+      <button onClick={onClick} className="press-row -mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 text-left">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ background: done ? 'var(--good)' : color }} aria-hidden>
+          {done ? '✓' : icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={`block text-[15px] font-semibold ${done ? 'text-ink-2' : ''}`}>{title}</span>
+          {subtitle && <span className="block text-xs text-ink-2">{subtitle}</span>}
+        </span>
+        <span className="text-ink-3" aria-hidden>
+          ›
+        </span>
+      </button>
+      {children}
+    </div>
   )
 }

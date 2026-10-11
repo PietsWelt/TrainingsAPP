@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Card, StatusLabel, type Status } from '../components/ui'
+import { Sheet } from '../components/Sheet'
+import { Card, StatusLabel, type CardVariant, type Status } from '../components/ui'
 import { tap } from '../lib/haptics'
 import { HEAT_EVIDENCE, heatAdvice, heatLevel, heatPace, heatPct, LEVEL_COLOR, LEVEL_TEXT, type HeatLevel } from '../lib/heat'
 import { fmtPace } from '../lib/plan/generate'
@@ -35,12 +36,13 @@ const fmt = (t: { pace: number; slow?: number }, pct: number) =>
   t.slow ? `${fmtPace(heatPace(t.pace, pct))}–${fmtPace(heatPace(t.slow, pct))}/km` : `${fmtPace(heatPace(t.pace, pct))}/km`
 
 /** Auf „Heute“, wenn ein Lauf geplant ist: Hitze-Effekt je Stunde und angepasste Zieltempos. */
-export function HeatCard({ workout }: { workout: PlanWorkout | undefined }) {
+export function HeatCard({ workout, variant = 'card' }: { workout: PlanWorkout | undefined; variant?: CardVariant }) {
   const [choice, setChoice] = useState<GeoChoice>(geoChoice)
   const forecast = useForecast(!!workout && choice != null, choice)
   const [picked, setPicked] = useState<string | null>(null)
   const [why, setWhy] = useState(false)
   const [now] = useState(() => new Date())
+  const [sheet, setSheet] = useState(false)
 
   const hours = useMemo(() => {
     if (!forecast) return []
@@ -51,6 +53,38 @@ export function HeatCard({ workout }: { workout: PlanWorkout | undefined }) {
   }, [forecast, now])
 
   if (!workout) return null
+
+  // In der Hauptkarte: eine Zeile, die volle Ansicht öffnet sich als Blatt.
+  if (variant === 'row') {
+    const line = (text: string) => (
+      <>
+        <button onClick={() => (tap(), setSheet(true))} className="press-row -mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center gap-2 rounded-xl px-2 text-left text-sm">
+          <span className="min-w-0 flex-1 text-ink-2">{text}</span>
+          <span className="shrink-0 text-accent">Wetter ›</span>
+        </button>
+        {sheet && (
+          <Sheet
+            title="Wetter für deinen Lauf"
+            onClose={() => {
+              setSheet(false)
+              setChoice(geoChoice())
+            }}
+          >
+            <HeatCard workout={workout} />
+          </Sheet>
+        )}
+      </>
+    )
+    if (choice == null) return line('Hitze macht gleiche Anstrengung langsamer. Wetter für deinen Lauf prüfen?')
+    if (forecast === undefined) return line('Wetter wird geladen …')
+    if (!forecast || !hours.length) return null
+    const pcts = hours.map((h) => heatPct(h.temp, h.dew))
+    const de = (x: number) => x.toLocaleString('de-DE')
+    const max = Math.max(...pcts)
+    return line(
+      `Jetzt ${Math.round(hours[0].temp)} °C, ${pcts[0] > 0 ? `etwa ${de(pcts[0])} % langsamer` : 'kein Hitze-Effekt'}${max > pcts[0] ? `, später bis ${de(max)} %` : ''}.`,
+    )
+  }
 
   if (choice == null) {
     const pick = (v: 'yes' | 'no') => {

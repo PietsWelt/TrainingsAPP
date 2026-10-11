@@ -1,7 +1,8 @@
 // Rückmeldung nach der Einheit: zu leicht, passend, zu hart.
 
 import { useState } from 'react'
-import { Card, StatusLabel, type Status } from '../components/ui'
+import { Sheet } from '../components/Sheet'
+import { Card, StatusLabel, TaskRow, type CardVariant, type Status } from '../components/ui'
 import { analysisFor, shiftMessage, type Analysis } from '../lib/plan/analyze'
 import type { Activity } from '../lib/types'
 import { tap } from '../lib/haptics'
@@ -85,18 +86,38 @@ export function AnalysisBlock({ a }: { a: Analysis }) {
  * Auf „Heute“: Auswertung der letzten erledigten Einheit der letzten zwei Tage.
  * Mit Uhr-Daten bewertet die App selbst, sonst fragt sie nach deiner Einschätzung.
  */
-export function FeedbackCard({ plan, today, activities }: { plan: PlanState; today: string; activities: Activity[] }) {
-  const { busy, rate } = useRate(plan)
-  const seen = useAppState<string | null>('feedback.seen', null)
-  const w = [...plan.workouts]
-    .reverse()
-    .find((x) => x.status === 'done' && x.sport !== 'race' && x.date <= today && x.date >= addDays(today, -2))
+/** Die Einheit, die auf Bewertung oder Kenntnisnahme der Auswertung wartet (null = nichts offen). */
+export function feedbackDue(workouts: PlanWorkout[], today: string, activities: Activity[], seen: string | null): { w: PlanWorkout; a: Analysis | null } | null {
+  const w = [...workouts].reverse().find((x) => x.status === 'done' && x.sport !== 'race' && x.date <= today && x.date >= addDays(today, -2))
   if (!w) return null
   const a = analysisFor(w, activities)
   if (w.feedback && (!a || seen === w.id)) return null
+  return { w, a }
+}
+
+export function FeedbackCard({ plan, today, activities, variant = 'card' }: { plan: PlanState; today: string; activities: Activity[]; variant?: CardVariant }) {
+  const { busy, rate } = useRate(plan)
+  const [open, setOpen] = useState(false)
+  const seen = useAppState<string | null>('feedback.seen', null)
+  const due = feedbackDue(plan.workouts, today, activities, seen)
+  if (!due) return null
+  const { w, a } = due
   const when = w.date === today ? 'heute' : w.date === addDays(today, -1) ? 'gestern' : `am ${WEEKDAY_LONG[weekday(w.date)]}`
+  const title = a ? `Auswertung: ${w.title}` : `Wie war „${w.title}“?`
+  const subtitle = a ? `Gelaufen ${when}, aus deinen Uhr-Daten.` : `Erledigt ${when}. Damit passe ich die nächsten Einheiten an.`
+  if (variant === 'row')
+    return (
+      <>
+        <TaskRow icon="★" color="var(--series-3)" title={title} subtitle={a ? `${FEEDBACK_LABEL[a.verdict]} · ${subtitle}` : subtitle} onClick={() => (tap(), setOpen(true))} />
+        {open && (
+          <Sheet title="Einheit bewerten" onClose={() => setOpen(false)}>
+            <FeedbackCard plan={plan} today={today} activities={activities} />
+          </Sheet>
+        )}
+      </>
+    )
   return (
-    <Card title={a ? `Auswertung: ${w.title}` : `Wie war „${w.title}“?`} subtitle={a ? `Gelaufen ${when}, aus deinen Uhr-Daten.` : `Erledigt ${when}. Damit passe ich die nächsten Einheiten an.`}>
+    <Card title={title} subtitle={subtitle}>
       {a && <AnalysisBlock a={a} />}
       <FeedbackChips value={w.feedback} onPick={(f) => rate(w, f)} disabled={busy} />
       {a && w.feedback && (

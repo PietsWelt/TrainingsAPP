@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Card } from '../components/ui'
+import { Card, type CardVariant } from '../components/ui'
 import { addDays } from '../lib/plan/dates'
 import { MARK_DELOAD, MARK_LIGHT, overloadCheck } from '../lib/plan/overload'
 import type { PlanWorkout } from '../lib/plan/types'
@@ -15,20 +15,38 @@ const EVIDENCE = [
 ]
 
 /** Auf „Heute“: nur sichtbar, wenn es Warnzeichen für Überlastung gibt. */
-export function OverloadCard({ days, activities, workouts, today }: { days: DailyMetrics[]; activities: Activity[]; workouts: PlanWorkout[]; today: string }) {
+export function OverloadCard({ days, activities, workouts, today, variant = 'card' }: { days: DailyMetrics[]; activities: Activity[]; workouts: PlanWorkout[]; today: string; variant?: CardVariant }) {
   const check = useMemo(() => overloadCheck(days, activities, workouts, today), [days, activities, workouts, today])
   const [why, setWhy] = useState(false)
+  const [more, setMore] = useState(false)
   if (check.level === 0) return null
   const adjusted = workouts.filter((w) => w.date >= today && w.date < addDays(today, 7) && (w.title.includes(MARK_DELOAD) || w.title.includes(MARK_LIGHT)))
   const color = check.level === 2 ? 'var(--serious)' : 'var(--warning)'
+  const headline = check.level === 2 ? 'Warnzeichen für Überlastung' : 'Ein Warnzeichen für Überlastung'
+  // In der Hauptkarte: farbiges Band oben, Details zum Aufklappen.
+  if (variant === 'embedded' && !more)
+    return (
+      <button
+        onClick={() => setMore(true)}
+        aria-expanded={false}
+        className="flex min-h-11 w-full items-center gap-2 px-5 py-2.5 text-left text-sm font-semibold text-white"
+        style={{ background: color }}
+      >
+        <span aria-hidden>!</span>
+        <span className="min-w-0 flex-1">
+          {headline}: {check.signals.map((x) => x.label).join(', ')}
+        </span>
+        <span aria-hidden>›</span>
+      </button>
+    )
   return (
-    <Card>
+    <Card bare={variant === 'embedded'} className={variant === 'embedded' ? 'border-b border-line px-5 py-4' : ''}>
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white" style={{ background: color }} aria-hidden>
           !
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-semibold">{check.level === 2 ? 'Warnzeichen für Überlastung' : 'Ein Warnzeichen für Überlastung'}</div>
+          <div className="text-[15px] font-semibold">{headline}</div>
           <ul className="mt-1.5 space-y-1 text-sm text-ink-2">
             {check.signals.map((s) => (
               <li key={s.key}>

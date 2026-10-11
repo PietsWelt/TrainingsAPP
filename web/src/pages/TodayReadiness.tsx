@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Pill, Ring, StatusLabel } from '../components/ui'
+import { Card, Pill, Ring, StatusLabel, type CardVariant } from '../components/ui'
 import { tap } from '../lib/haptics'
 import { legsProposal, readinessProposal } from '../lib/plan/adapt'
 import type { PlanState } from '../lib/plan/usePlan'
@@ -8,12 +8,13 @@ import { setState, useAppState } from '../lib/appState'
 import { toast } from '../lib/toast'
 import type { DailyLogState } from '../lib/useDailyLog'
 
-export function ReadinessCard({ r, garmin }: { r: Readiness; garmin: number | null | undefined }) {
+export function ReadinessCard({ r, garmin, variant = 'card' }: { r: Readiness; garmin: number | null | undefined; variant?: CardVariant }) {
   const [open, setOpen] = useState(false)
+  const embedded = variant === 'embedded'
   return (
-    <Card hero className="p-5">
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="press-row -m-2 flex w-[calc(100%+1rem)] items-center gap-5 rounded-2xl p-2 text-left">
-        <Ring value={r.score} size={108} stroke={10} color="brand" label={`Readiness ${r.score} von 100`}>
+    <Card hero bare={embedded} className={embedded ? '' : 'p-5'}>
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className={`press-row -m-2 flex w-[calc(100%+1rem)] items-center rounded-2xl p-2 text-left ${embedded ? 'gap-4' : 'gap-5'}`}>
+        <Ring value={r.score} size={embedded ? 92 : 108} stroke={embedded ? 9 : 10} color="brand" label={`Readiness ${r.score} von 100`}>
           <span className="font-display text-[32px] leading-none font-bold tabular-nums">{r.score}</span>
           <span className="mt-0.5 text-[11px] text-ink-3">von 100</span>
         </Ring>
@@ -56,7 +57,7 @@ export function ReadinessCard({ r, garmin }: { r: Readiness; garmin: number | nu
 
 const barColor = (s: number) => (s >= 70 ? 'var(--good)' : s >= 50 ? 'var(--warning)' : s >= 35 ? 'var(--serious)' : 'var(--critical)')
 
-export function ProposalCard({ plan, r, today, log }: { plan: PlanState; r: Readiness | null; today: string; log: DailyLogState }) {
+export function ProposalCard({ plan, r, today, log, variant = 'card' }: { plan: PlanState; r: Readiness | null; today: string; log: DailyLogState; variant?: CardVariant }) {
   const dismissed = useAppState<string | null>('readiness.dismissed', null) === today
   const [busy, setBusy] = useState(false)
   const p = readinessProposal(plan.workouts, today, r) ?? legsProposal(plan.workouts, today, legFatigue(today, log.gym))
@@ -76,7 +77,7 @@ export function ProposalCard({ plan, r, today, log }: { plan: PlanState; r: Read
   }
 
   return (
-    <Card title="Plan anpassen?" subtitle={`Heute geplant: ${p.workout.title}`}>
+    <Card title="Plan anpassen?" subtitle={`Heute geplant: ${p.workout.title}`} bare={variant === 'embedded'} className={variant === 'embedded' ? 'mt-4 border-t border-line pt-4' : ''}>
       <p className="text-sm text-ink-2">{p.reason}</p>
       <div className="mt-3 grid gap-2">
         {p.options.map((o, i) => (

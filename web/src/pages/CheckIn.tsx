@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Sheet } from '../components/Sheet'
-import { Card, Segmented } from '../components/ui'
+import { Card, Segmented, TaskRow, type CardVariant } from '../components/ui'
 import type { GymEntry, GymFocus } from '../lib/dailyLog'
 import { tap } from '../lib/haptics'
 import { addDays, mondayOf, WEEKDAY_LONG, weekday } from '../lib/plan/dates'
@@ -8,6 +8,7 @@ import type { PlanWorkout } from '../lib/plan/types'
 import { weekStrength } from '../lib/strength'
 import type { PlanState } from '../lib/plan/usePlan'
 import { setState, useAppState } from '../lib/appState'
+import type { CheckInState } from '../lib/todayTasks'
 import { toast } from '../lib/toast'
 import type { DailyLogState } from '../lib/useDailyLog'
 import { StrengthSheet } from './Strength'
@@ -24,19 +25,93 @@ function gymText(g: GymEntry | undefined) {
   if (!g) return 'kein Krafttraining'
   return `${FOCUS.find((f) => f.id === g.focus)?.label}, ${g.hard ? 'hart' : 'locker'}`
 }
+function legsHint(nextKey: PlanWorkout, today: string): string {
+  return nextKey.date === addDays(today, 1)
+    ? `Morgen steht ${nextKey.title} an. Mit müden Beinen schlägt dir die App morgen locker oder verschieben vor.`
+    : `Nächste harte Einheit: ${nextKey.title} am ${WEEKDAY_LONG[weekday(nextKey.date)]}. Genug Abstand für die Beine.`
+}
 const drinkText = (n: number | undefined) => (n == null ? 'Alkohol offen' : n === 0 ? 'kein Alkohol' : `${n >= 5 ? '5+' : n} ${n === 1 ? 'Getränk' : 'Getränke'}`)
 
 /**
  * Täglicher Check-in: Alkohol und Krafttraining für gestern oder heute in einem Formular.
  * Einträge hängen am Datum; um Mitternacht wird aus „Heute“ einfach „Gestern“.
  */
-export function CheckInCard({ log, plan, today, strengthToday }: { log: DailyLogState; plan: PlanState; today: string; strengthToday: boolean }) {
+/** Was beim Check-in ansteht: gestern fehlt, heute etwas nachzutragen (Krafttraining erkannt) oder alles erledigt. */
+export function checkInState(log: Pick<DailyLogState, 'drinks' | 'gym'>, today: string, doneMark: string | null, strengthToday: boolean): CheckInState {
+  if (doneMark !== today && log.drinks[addDays(today, -1)] == null) return 'yesterday'
+  if (strengthToday && !log.gym[today]) return 'today'
+  return 'done'
+}
+
+export function CheckInCard({ log, plan, today, strengthToday, variant = 'card' }: { log: DailyLogState; plan: PlanState; today: string; strengthToday: boolean; variant?: CardVariant | 'hint' | 'link' }) {
   const [open, setOpen] = useState<'yesterday' | 'today' | null>(null)
   const done = useAppState<string | null>('checkin.done', null)
   const yesterday = addDays(today, -1)
-  const yesterdayDone = done === today || log.drinks[yesterday] != null
+  const state = checkInState(log, today, done, strengthToday)
+  const yesterdayDone = state !== 'yesterday'
   const nextKey = plan.workouts.find((w) => w.date > today && w.key_session && w.status === 'planned' && w.sport !== 'race')
   const legsToday = log.gym[today] && (log.gym[today].focus === 'legs' || log.gym[today].focus === 'full')
+  const sheet = open && (
+    <CheckInSheet
+      log={log}
+      workouts={plan.workouts}
+      initial={open}
+      today={today}
+      onClose={() => setOpen(null)}
+      onSaved={(day) => {
+        if (day === 'yesterday') void setState('checkin.done', today)
+        setOpen(null)
+      }}
+    />
+  )
+
+  // Knopf neben „Körper“: jederzeit für heute nachtragen.
+  if (variant === 'link')
+    return (
+      <>
+        <button onClick={() => (tap(), setOpen('today'))} className="min-h-10 px-1 text-sm font-medium text-accent">
+          Eintragen
+        </button>
+        {sheet}
+      </>
+    )
+
+  // Hauptkarte: nur der Hinweis, wenn gestern noch fehlt (2.3).
+  if (variant === 'hint')
+    return yesterdayDone ? null : (
+      <>
+        <button onClick={() => (tap(), setOpen('yesterday'))} className="press-row -mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between gap-2 rounded-xl px-2 text-left text-sm">
+          <span>
+            <span className="font-semibold">Gestern noch nicht eingetragen.</span> <span className="text-ink-2">Alkohol und Krafttraining fließen in die Readiness ein.</span>
+          </span>
+          <span className="shrink-0 text-accent">Eintragen ›</span>
+        </button>
+        {sheet}
+      </>
+    )
+
+  if (variant === 'row')
+    return (
+      <>
+        <TaskRow
+          icon="✎"
+          color="var(--series-1)"
+          done={state === 'done'}
+          title={state === 'today' ? 'Krafttraining eintragen' : state === 'done' ? 'Check-in erledigt' : 'Check-in für gestern'}
+          subtitle={
+            state === 'today'
+              ? 'Garmin hat heute Krafttraining erkannt. Was hast du trainiert?'
+              : state === 'done'
+                ? `Gestern: ${drinkText(log.drinks[yesterday])}, ${gymText(log.gym[yesterday])}. Heute: ${log.drinks[today] != null || log.gym[today] ? `${drinkText(log.drinks[today])}, ${gymText(log.gym[today])}` : 'noch nichts'}`
+                : 'Alkohol und Krafttraining fließen in deine Readiness ein.'
+          }
+          onClick={() => (tap(), setOpen(state === 'today' ? 'today' : 'yesterday'))}
+        >
+          {legsToday && nextKey && <p className="pb-1 pl-12 text-xs text-ink-2">{legsHint(nextKey, today)}</p>}
+        </TaskRow>
+        {sheet}
+      </>
+    )
 
   return (
     <>
@@ -78,30 +153,10 @@ export function CheckInCard({ log, plan, today, strengthToday }: { log: DailyLog
             Eintragen
           </button>
         </div>
-        {legsToday && nextKey && (
-          <p className="mt-3 text-xs text-ink-2">
-            {nextKey.date === addDays(today, 1)
-              ? `Morgen steht ${nextKey.title} an. Mit müden Beinen schlägt dir die App morgen locker oder verschieben vor.`
-              : `Nächste harte Einheit: ${nextKey.title} am ${WEEKDAY_LONG[weekday(nextKey.date)]}. Genug Abstand für die Beine.`}
-          </p>
-        )}
+        {legsToday && nextKey && <p className="mt-3 text-xs text-ink-2">{legsHint(nextKey, today)}</p>}
       </Card>
 
-      {open && (
-        <CheckInSheet
-          log={log}
-          workouts={plan.workouts}
-          initial={open}
-          today={today}
-          onClose={() => setOpen(null)}
-          onSaved={(day) => {
-            if (day === 'yesterday') {
-              void setState('checkin.done', today)
-            }
-            setOpen(null)
-          }}
-        />
-      )}
+      {sheet}
     </>
   )
 }
