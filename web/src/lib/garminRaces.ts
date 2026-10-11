@@ -1,5 +1,6 @@
 // Rennen aus dem Garmin-Kalender: Art aus Strecke, Sportart und Name erraten und Vorschläge filtern.
 
+import { addToList, getState } from './appState'
 import type { EventType, RaceEvent } from './plan/types'
 
 export interface GarminRace {
@@ -33,23 +34,10 @@ export function guessType(r: Pick<GarminRace, 'name' | 'distance_m' | 'sport'>):
   return 'half'
 }
 
-const KEY = 'garmin.races.handled'
+// Übernommene oder ausgeblendete Garmin-Rennen gelten auf allen Geräten (app_state).
+export const handledIds = (): number[] => getState<number[]>('garmin.races.handled', [])
 
-export function handledIds(): number[] {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '[]') as number[]
-  } catch {
-    return []
-  }
-}
-
-export function markHandled(id: number) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify([...new Set([...handledIds(), id])]))
-  } catch {
-    // ohne Speicher bleibt der Vorschlag sichtbar
-  }
-}
+export const markHandled = (id: number) => addToList('garmin.races.handled', id)
 
 /** Kommende Garmin-Rennen, die noch nicht übernommen oder ausgeblendet wurden und kein App-Rennen am selben Tag haben. */
 export function openSuggestions(races: GarminRace[], events: RaceEvent[], today: string, handled = handledIds()): GarminRace[] {

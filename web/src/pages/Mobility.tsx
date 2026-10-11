@@ -5,34 +5,16 @@ import { tap } from '../lib/haptics'
 import { BEGINNER_TIPS, buildRoutine, DOSE, EVIDENCE, LEVELS, routineKind, type Level, type RoutineKind } from '../lib/mobility'
 import { toast } from '../lib/toast'
 import type { Activity } from '../lib/types'
-
-const LEVEL_KEY = 'mobility.level'
-const DONE_KEY = 'mobility.done'
-
-function read<T>(key: string, fallback: T): T {
-  try {
-    const v = localStorage.getItem(key)
-    return v ? (JSON.parse(v) as T) : fallback
-  } catch {
-    return fallback
-  }
-}
-function write(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    // ohne Speicher bleibt es bei der Sitzung
-  }
-}
+import { setState, useAppState } from '../lib/appState'
 
 const TYPE_LABEL = { roll: 'Rolle', stretch: 'Dehnen', mobility: 'Mobilität' } as const
 const TYPE_COLOR = { roll: 'var(--series-2)', stretch: 'var(--accent)', mobility: 'var(--series-3)' } as const
 
 /** Auf „Heute“: Nach jedem Training die passende Routine vorschlagen. */
 export function MobilityCard({ activities, today }: { activities: Activity[]; today: string }) {
-  const [done, setDone] = useState<number[]>(() => read(DONE_KEY, []))
+  const done = useAppState<number[]>('mobility.done', [])
   const [open, setOpen] = useState(false)
-  const level = read<Level>(LEVEL_KEY, 'easy')
+  const level = useAppState<Level>('mobility.level', 'easy')
   const a = activities.find((x) => x.local_date === today && routineKind(x))
   if (!a) return null
   const kind = routineKind(a)!
@@ -68,8 +50,7 @@ export function MobilityCard({ activities, today }: { activities: Activity[]; to
           onClose={() => setOpen(false)}
           onDone={() => {
             const next = [a.id, ...done.filter((x) => x !== a.id)].slice(0, 60)
-            write(DONE_KEY, next)
-            setDone(next)
+            void setState('mobility.done', next)
             setOpen(false)
           }}
         />
@@ -94,7 +75,7 @@ export function MobilityButton({ activity }: { activity: Activity }) {
 }
 
 export function MobilitySheet({ kind, done = false, onClose, onDone }: { kind: RoutineKind; done?: boolean; onClose: () => void; onDone?: () => void }) {
-  const [level, setLevel] = useState<Level>(() => read(LEVEL_KEY, 'easy'))
+  const level = useAppState<Level>('mobility.level', 'easy')
   const r = buildRoutine(kind, level)
 
   return (
@@ -120,8 +101,7 @@ export function MobilitySheet({ kind, done = false, onClose, onDone }: { kind: R
         value={level}
         onChange={(v) => {
           tap()
-          setLevel(v)
-          write(LEVEL_KEY, v)
+          void setState('mobility.level', v)
         }}
         options={LEVELS}
       />

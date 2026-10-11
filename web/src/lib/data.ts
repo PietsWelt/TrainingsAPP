@@ -1,3 +1,4 @@
+import { appState } from './appState'
 import { demoDataset } from './demo'
 import type { GarminRace } from './garminRaces'
 import { supabase } from './supabase'
@@ -14,6 +15,7 @@ const RUN_COLS = 'id,trigger,started_at,finished_at,status,message'
 export async function loadDataset(days = 180): Promise<Dataset> {
   if (!supabase) return demoDataset()
   const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10)
+  // App-Zustände (Erledigt-Haken usw.) laufen parallel mit, ohne zusätzliche Wartezeit.
   const [a, d, s, records, drift, predictions, races, strap, lactate] = await Promise.all([
     supabase.from('activities').select(ACTIVITY_COLS).gte('local_date', since).order('start_time', { ascending: false }),
     supabase.from('daily_metrics').select(DAY_COLS).gte('date', since).order('date'),
@@ -24,6 +26,7 @@ export async function loadDataset(days = 180): Promise<Dataset> {
     supabase.from('garmin_races').select('id,name,date,distance_m,sport').order('date'),
     loadStrap(since),
     supabase.from('garmin_lactate').select('date,hr,speed_mps').order('date'),
+    appState.load(),
   ])
   const err = a.error ?? d.error ?? s.error
   if (err) throw new Error(err.message)

@@ -9,6 +9,7 @@ import { FEEDBACK_LABEL } from '../lib/plan/adapt'
 import { addDays, WEEKDAY_LONG, weekday } from '../lib/plan/dates'
 import type { Feedback, PlanWorkout } from '../lib/plan/types'
 import type { PlanState } from '../lib/plan/usePlan'
+import { setState, useAppState } from '../lib/appState'
 import { toast } from '../lib/toast'
 
 const ORDER: Feedback[] = ['easy', 'ok', 'hard']
@@ -79,14 +80,6 @@ export function AnalysisBlock({ a }: { a: Analysis }) {
   )
 }
 
-const SEEN_KEY = 'feedback.seen'
-const readSeen = () => {
-  try {
-    return localStorage.getItem(SEEN_KEY)
-  } catch {
-    return null
-  }
-}
 
 /**
  * Auf „Heute“: Auswertung der letzten erledigten Einheit der letzten zwei Tage.
@@ -94,7 +87,7 @@ const readSeen = () => {
  */
 export function FeedbackCard({ plan, today, activities }: { plan: PlanState; today: string; activities: Activity[] }) {
   const { busy, rate } = useRate(plan)
-  const [seen, setSeen] = useState(readSeen)
+  const seen = useAppState<string | null>('feedback.seen', null)
   const w = [...plan.workouts]
     .reverse()
     .find((x) => x.status === 'done' && x.sport !== 'race' && x.date <= today && x.date >= addDays(today, -2))
@@ -109,12 +102,7 @@ export function FeedbackCard({ plan, today, activities }: { plan: PlanState; tod
       {a && w.feedback && (
         <button
           onClick={() => {
-            try {
-              localStorage.setItem(SEEN_KEY, w.id)
-            } catch {
-              // ohne Speicher bleibt die Karte bis morgen sichtbar
-            }
-            setSeen(w.id)
+            void setState('feedback.seen', w.id)
           }}
           className="mt-3 min-h-11 w-full rounded-xl text-sm font-semibold text-accent"
         >

@@ -11,6 +11,7 @@ import { addDays, localToday } from './dates'
 import { fitnessFrom } from './fitness'
 import { generateAll } from './multi'
 import { deload, longRunGuard, overloadCheck } from './overload'
+import { addToList, appState, getState, setState } from '../appState'
 import { hasColumn, planStore } from './store'
 import type { Feedback, PlanWorkout, RaceEvent } from './types'
 
@@ -42,34 +43,13 @@ function friendly(e: unknown): string {
 }
 
 /** `day` ändert sich beim ersten Öffnen an einem neuen Tag, damit Verpasstes auch ohne neue Daten nachgezogen wird. */
-const OVERLOAD_KEY = 'overload.applied'
 // Feste leere Liste: ein neues [] bei jedem Aufruf würde den Plan endlos neu laden.
 const NO_METRICS: DailyMetrics[] = []
 // Aktivitäten, deren automatischen Haken du entfernt hast: werden keiner Einheit mehr zugeordnet.
-const RELEASED_KEY = 'plan.released'
-function readReleased(): number[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(RELEASED_KEY) ?? '[]')
-    return Array.isArray(v) ? v : []
-  } catch {
-    return []
-  }
-}
-function release(id: number) {
-  try {
-    localStorage.setItem(RELEASED_KEY, JSON.stringify([...readReleased().filter((x) => x !== id), id].slice(-50)))
-  } catch {
-    // ohne Speicher kann der Haken beim nächsten Laden zurückkommen
-  }
-}
-
-function readApplied(): { date: string; level: number } | null {
-  try {
-    return JSON.parse(localStorage.getItem(OVERLOAD_KEY) ?? 'null')
-  } catch {
-    return null
-  }
-}
+// Liegen in app_state, damit ein am Handy entfernter Haken nicht am PC zurückkommt.
+const readReleased = (): number[] => getState<number[]>('plan.released', [])
+const release = (id: number) => void addToList('plan.released', id)
+const readApplied = () => getState<{ date: string; level: number } | null>('overload.applied', null)
 
 export function usePlan(activities: Activity[] | undefined, day = localToday(), metrics: DailyMetrics[] = NO_METRICS): PlanState {
   const [events, setEvents] = useState<RaceEvent[]>([])
@@ -81,7 +61,8 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
     // Ohne Aktivitäten nichts rechnen: sonst läuft alles doppelt, einmal davon mit leerer Fitness.
     if (!activities) return
     try {
-      const [ev, ws] = await Promise.all([planStore.listEvents(), planStore.listWorkouts()])
+      // Erst den geteilten Stand abwarten: sonst setzt ein Gerät Haken wieder, die ein anderes entfernt hat.
+      const [ev, ws] = await Promise.all([planStore.listEvents(), planStore.listWorkouts(), appState.ready()])
       const today = day
       const released = new Set(readReleased())
       const usable = activities.filter((a) => !released.has(a.id))
@@ -130,13 +111,7 @@ export function usePlan(activities: Activity[] | undefined, day = localToday(), 
         const check = overloadCheck(metrics, activities, current, today)
         const dl = deload(current, check, today, readApplied())
         current = current.map((w) => dl.changed.find((c) => c.id === w.id) ?? w)
-        if (dl.changed.length) {
-          try {
-            localStorage.setItem(OVERLOAD_KEY, JSON.stringify({ date: today, level: check.level }))
-          } catch {
-            // ohne Speicher verhindert die Markierung im Titel die doppelte Anpassung
-          }
-        }
+        if (dl.changed.length) void setState('overload.applied', { date: today, level: check.level })
         safety = merge(guard.changed, dl.changed)
         const notes = [...guard.messages, ...dl.messages]
         if (notes.length) toast(`Plan angepasst: ${notes.join(' ')}`)
