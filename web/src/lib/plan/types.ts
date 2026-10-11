@@ -55,6 +55,9 @@ export interface WorkStep {
   pace?: number
   /** Langsame Grenze, falls das Ziel ein Bereich ist (lockere Läufe): dann gilt pace … pace_slow. */
   pace_slow?: number
+  /** Puls-Bereich in bpm (ruhige Abschnitte, aus der aeroben Schwelle). Hat auf der Uhr Vorrang vor dem Tempo. */
+  hr_low?: number
+  hr_high?: number
   note?: string
 }
 export interface RepeatStep {
@@ -95,6 +98,10 @@ export interface Fitness {
   weeklyRunKm: number
   longestRunKm: number
   weeklyHours: { swim: number; bike: number; run: number }
+  /** Gemessene Schwelle (s/km) als Ausgangspunkt der Tempos; ohne Messwert gelten die Tempos aus der Zielzeit. */
+  threshold?: { pace: number; source: 'brustgurt' | 'garmin' | 'bestzeit'; date: string } | null
+  /** Puls an der aeroben Schwelle (Brustgurt) für Puls-Ziele bei lockeren Läufen. */
+  aetHr?: number | null
 }
 
 export const PHASE_LABEL: Record<Phase, string> = {

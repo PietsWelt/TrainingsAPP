@@ -12,7 +12,8 @@ const STEP_NAME: Record<WorkStep['type'], string> = { warmup: 'Einlaufen', run: 
 
 /** Alle Zieltempos des Laufs als „Name: Tempo“, ohne Doppelte. */
 function paceTargets(steps: Step[] | null | undefined): { name: string; pace: number; slow?: number }[] {
-  const flat = (steps ?? []).flatMap((s) => (s.type === 'repeat' ? s.steps : [s])).filter((s) => s.pace)
+  // Mit Puls-Ziel zählt der Puls, das Tempo ergibt sich: dafür kein angepasstes Tempo zeigen.
+  const flat = (steps ?? []).flatMap((s) => (s.type === 'repeat' ? s.steps : [s])).filter((s) => s.pace && s.hr_high == null)
   const seen = new Set<string>()
   const out: { name: string; pace: number; slow?: number }[] = []
   for (const s of flat) {
@@ -23,6 +24,11 @@ function paceTargets(steps: Step[] | null | undefined): { name: string; pace: nu
     out.push({ name, pace: s.pace!, slow: s.pace_slow })
   }
   return out
+}
+
+/** Erster Abschnitt mit Puls-Ziel (lockere Läufe mit bekannter aerober Schwelle). */
+function hrTarget(steps: Step[] | null | undefined): WorkStep | undefined {
+  return (steps ?? []).flatMap((s) => (s.type === 'repeat' ? s.steps : [s])).find((s) => s.hr_low != null && s.hr_high != null)
 }
 
 const fmt = (t: { pace: number; slow?: number }, pct: number) =>
@@ -72,6 +78,7 @@ export function HeatCard({ workout }: { workout: PlanWorkout | undefined }) {
   const level = heatLevel(sel.pct)
   const maxPct = Math.max(...withPct.map((h) => h.pct))
   const targets = paceTargets(workout.steps)
+  const hr = hrTarget(workout.steps)
   const today = hours[0]?.time.slice(0, 10)
   const firstTomorrow = hours.find((x) => x.time.slice(0, 10) !== today)?.time
   const hour = (h: HourWeather) => `${h.time.slice(0, 10) !== today ? 'Morgen ' : ''}${Number(h.time.slice(11, 13))} Uhr`
@@ -115,6 +122,13 @@ export function HeatCard({ workout }: { workout: PlanWorkout | undefined }) {
         {heatAdvice(sel.pct)}
       </p>
 
+      {sel.pct > 0 && hr && (
+        <p className="mt-3 flex items-baseline justify-between gap-3 text-sm">
+          <span className="text-ink-2">{hr.note ?? 'Locker'}</span>
+          <span className="font-semibold">Puls {hr.hr_low}–{hr.hr_high}</span>
+        </p>
+      )}
+      {sel.pct > 0 && hr && <p className="mt-1 text-xs text-ink-3">Dein Puls-Ziel gilt, das Tempo ergibt sich. Bei Hitze wirst du damit von selbst langsamer.</p>}
       {sel.pct > 0 && targets.length > 0 && (
         <ul className="mt-3 space-y-1.5 text-sm">
           {targets.map((t) => (

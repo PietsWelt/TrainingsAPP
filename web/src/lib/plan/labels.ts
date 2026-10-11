@@ -19,7 +19,8 @@ function stepAmount(s: WorkStep): string {
 /** Eine Zeile pro Schritt, z.B. „6 × 800 m @ 4:05/km, 400 m Pause“. */
 export function stepLines(steps: Step[]): string[] {
   const one = (s: WorkStep) => {
-    const pace = s.pace ? ` @ ${fmtPace(s.pace)}/km` : ''
+    // Puls-Ziel hat Vorrang (so steht es auch auf der Uhr), sonst das Tempo.
+    const pace = s.hr_low != null && s.hr_high != null ? ` · Puls ${s.hr_low}–${s.hr_high}` : s.pace ? ` @ ${fmtPace(s.pace)}/km` : ''
     const name = s.type === 'run' ? (s.note ?? STEP_NAME.run) : STEP_NAME[s.type]
     return `${name} ${stepAmount(s)}${pace}`
   }

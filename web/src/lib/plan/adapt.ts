@@ -5,7 +5,8 @@ import { sportGroup } from '../format'
 import type { Activity } from '../types'
 import { addDays, daysBetween, mondayOf, WEEKDAY_LONG, weekday } from './dates'
 import type { Readiness } from '../readiness'
-import type { Feedback, PlanWorkout, Step } from './types'
+import { hrRange, hrText } from './generate'
+import type { Feedback, Kind, PlanWorkout, Step, WorkStep } from './types'
 
 export interface Change {
   changed: PlanWorkout[]
@@ -366,6 +367,36 @@ export function fillSteps(plan: PlanWorkout[], fresh: PlanWorkout[], today: stri
     if (w.status !== 'planned' || w.date < today || w.sport !== 'run' || w.steps != null || w.original) continue
     const steps = byKey.get(`${w.moved_from ?? w.date}|${w.title}`)
     if (steps) changed.push({ ...w, steps: fitSteps(steps, w.distance_km) })
+  }
+  return changed
+}
+
+const CALM_KINDS: Kind[] = ['easy', 'long', 'recovery', 'strides']
+
+/**
+ * Puls-Ziele künftiger ruhiger Einheiten an die aktuelle aerobe Schwelle anpassen: neu setzen, sobald sie
+ * sich um mindestens 3 Schläge geändert hat, und bei älteren Plänen ergänzen. Der Sync schickt geänderte
+ * Einheiten neu an die Uhr. Zügige Abschnitte behalten ihr Tempo-Ziel.
+ */
+export function refreshHrTargets(workouts: PlanWorkout[], aetHr: number | null | undefined, today: string): PlanWorkout[] {
+  if (!aetHr) return []
+  const changed: PlanWorkout[] = []
+  for (const w of workouts) {
+    if (w.sport !== 'run' || w.status !== 'planned' || w.date < today || !w.steps?.length || w.original || !CALM_KINDS.includes(w.kind)) continue
+    const want = hrRange(aetHr, w.kind === 'recovery')
+    let touched = false
+    const fix = (s: WorkStep): WorkStep => {
+      // Ruhige Abschnitte erkennt man am Puls-Ziel oder am Tempobereich (pace … pace_slow).
+      if (s.type !== 'run' || (s.hr_high == null && s.pace_slow == null)) return s
+      if (s.hr_high != null && Math.abs(s.hr_high - want.hr_high) < 3) return s
+      touched = true
+      return { ...s, ...want }
+    }
+    const steps = w.steps.map((s): Step => (s.type === 'repeat' ? { ...s, steps: s.steps.map(fix) } : fix(s)))
+    if (!touched) continue
+    const text = `Puls ${want.hr_low}–${want.hr_high}`
+    const description = w.description && /Puls \d+–\d+/.test(w.description) ? w.description.replace(/Puls \d+–\d+/, text) : (w.description ?? '') + hrText(aetHr, w.kind === 'recovery')
+    changed.push({ ...w, steps, description: description.trim() })
   }
   return changed
 }

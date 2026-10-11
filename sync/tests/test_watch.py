@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from watch import PREFIX, fingerprint, garmin_workout, push_workouts  # noqa: E402
+from watch import PREFIX, _upload, fingerprint, garmin_workout, push_workouts  # noqa: E402
 
 INTERVALS = {
     "id": "a",
@@ -108,3 +108,47 @@ def test_push_uploads_new_skips_unchanged_and_cleans_up():
     assert sorted(g.deleted) == [8, 9]
     assert ("a", {"garmin_workout_id": 101, "garmin_hash": fingerprint(INTERVALS)}) in db.updates
     assert ("c", {"garmin_workout_id": None, "garmin_hash": None}) in db.updates
+
+
+EASY_HR = {**INTERVALS, "title": "Lockerer Lauf", "steps": [{"type": "run", "m": 8000, "pace": 330, "pace_slow": 370, "hr_low": 128, "hr_high": 148}]}
+
+
+def test_easy_run_with_hr_gets_heart_rate_target(monkeypatch):
+    monkeypatch.delenv("WATCH_EASY_TARGET", raising=False)
+    (step,) = garmin_workout(EASY_HR)["workoutSegments"][0]["workoutSteps"]
+    assert step["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
+    assert (step["targetValueOne"], step["targetValueTwo"]) == (128.0, 148.0)
+
+
+def test_steps_without_hr_keep_pace_target(monkeypatch):
+    monkeypatch.delenv("WATCH_EASY_TARGET", raising=False)
+    work = garmin_workout(INTERVALS)["workoutSegments"][0]["workoutSteps"][1]["workoutSteps"][0]
+    assert work["targetType"]["workoutTargetTypeKey"] == "pace.zone"
+
+
+def test_watch_easy_target_pace_forces_pace(monkeypatch):
+    monkeypatch.setenv("WATCH_EASY_TARGET", "pace")
+    (step,) = garmin_workout(EASY_HR)["workoutSegments"][0]["workoutSteps"]
+    assert step["targetType"]["workoutTargetTypeKey"] == "pace.zone"
+    assert step["targetValueOne"] == round(1000 / 370, 4)
+    # Umschalten ändert den Fingerabdruck nur bei Einheiten mit Puls-Ziel.
+    hr_hash, plain_hash = fingerprint(EASY_HR), fingerprint(INTERVALS)
+    monkeypatch.setenv("WATCH_EASY_TARGET", "hr")
+    assert fingerprint(EASY_HR) != hr_hash
+    assert fingerprint(INTERVALS) == plain_hash
+
+
+def test_upload_falls_back_to_pace_when_hr_is_rejected(monkeypatch):
+    monkeypatch.delenv("WATCH_EASY_TARGET", raising=False)
+
+    class Picky(FakeGarmin):
+        def upload_workout(self, w):
+            step = w["workoutSegments"][0]["workoutSteps"][0]
+            if step["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone":
+                raise ValueError("abgelehnt")
+            self.sent = step
+            return super().upload_workout(w)
+
+    g = Picky([])
+    _upload(g, EASY_HR)
+    assert g.sent["targetType"]["workoutTargetTypeKey"] == "pace.zone"

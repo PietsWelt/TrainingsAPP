@@ -61,7 +61,7 @@ function Main() {
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
-  const plan = usePlan(data?.activities, day, data?.days)
+  const plan = usePlan(data?.activities, day, data?.days, data?.records, data?.lactate)
   const log = useDailyLog()
 
   const refresh = useCallback(
@@ -216,7 +216,7 @@ function Main() {
           {!data && !error && <SkeletonPage />}
           <div key={tab} className={dir === 'right' ? 'tab-from-right' : dir === 'left' ? 'tab-from-left' : ''}>
             {data && tab === 'today' && <Today data={data} plan={plan} log={log} onOpenActivity={setOpenId} onOpenPlan={() => selectTab('plan')} />}
-            {data && tab === 'plan' && <Plan plan={plan} gym={log.gym} activities={data.activities} records={data.records} predictions={data.predictions} garminRaces={data.garminRaces} />}
+            {data && tab === 'plan' && <Plan plan={plan} gym={log.gym} activities={data.activities} records={data.records} predictions={data.predictions} garminRaces={data.garminRaces} lactate={data.lactate} />}
             {data && tab === 'trends' && (
               <Suspense fallback={<SkeletonPage />}>
                 <Trends data={data} drinks={log.drinks} gym={log.gym} plan={plan} />
