@@ -16,11 +16,28 @@ function stepAmount(s: WorkStep): string {
   return 'bis Rundentaste'
 }
 
+/** Ziel ruhiger Abschnitte auf der Uhr: Puls (Standard) oder Tempo. Einstellung `watch.easy_target`, gilt auch für den Sync. */
+export type EasyTarget = 'hr' | 'pace'
+export const EASY_TARGETS: { value: EasyTarget; label: string }[] = [
+  { value: 'hr', label: 'Puls' },
+  { value: 'pace', label: 'Tempo' },
+]
+
+/** Hat ein Ablauf ruhige Abschnitte mit Puls-Ziel? Nur dort macht der Umschalter einen Unterschied. */
+export function hasHrStep(steps: Step[] | null | undefined): boolean {
+  return (steps ?? []).some((s) => (s.type === 'repeat' ? hasHrStep(s.steps) : s.hr_low != null && s.hr_high != null))
+}
+
 /** Eine Zeile pro Schritt, z.B. „6 × 800 m @ 4:05/km, 400 m Pause“. */
-export function stepLines(steps: Step[]): string[] {
+export function stepLines(steps: Step[], target: EasyTarget = 'hr'): string[] {
   const one = (s: WorkStep) => {
-    // Puls-Ziel hat Vorrang (so steht es auch auf der Uhr), sonst das Tempo.
-    const pace = s.hr_low != null && s.hr_high != null ? ` · Puls ${s.hr_low}–${s.hr_high}` : s.pace ? ` @ ${fmtPace(s.pace)}/km` : ''
+    // So, wie es auf der Uhr steht: Puls-Ziel, wenn eingestellt und vorhanden, sonst Tempo (bei Bereichen von–bis).
+    const hr = target === 'hr' && s.hr_low != null && s.hr_high != null
+    const pace = hr
+      ? ` · Puls ${s.hr_low}–${s.hr_high}`
+      : s.pace
+        ? ` @ ${fmtPace(s.pace)}${s.pace_slow ? `–${fmtPace(s.pace_slow)}` : ''}/km`
+        : ''
     const name = s.type === 'run' ? (s.note ?? STEP_NAME.run) : STEP_NAME[s.type]
     return `${name} ${stepAmount(s)}${pace}`
   }

@@ -4,7 +4,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from watch import PREFIX, _upload, fingerprint, garmin_workout, push_workouts  # noqa: E402
+import pytest  # noqa: E402
+
+import watch  # noqa: E402
+from watch import PREFIX, _upload, easy_target, fingerprint, garmin_workout, load_easy_target, push_workouts  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_app_target(monkeypatch):
+    monkeypatch.setattr(watch, "_app_target", None)
 
 INTERVALS = {
     "id": "a",
@@ -152,3 +160,37 @@ def test_upload_falls_back_to_pace_when_hr_is_rejected(monkeypatch):
     g = Picky([])
     _upload(g, EASY_HR)
     assert g.sent["targetType"]["workoutTargetTypeKey"] == "pace.zone"
+
+
+class StateDb:
+    def __init__(self, value=None, fail=False):
+        self.value, self.fail = value, fail
+
+    def select(self, table, params):
+        if self.fail:
+            raise RuntimeError("relation app_state does not exist")
+        assert (table, params["key"]) == ("app_state", "eq.watch.easy_target")
+        return [] if self.value is None else [{"value": self.value}]
+
+
+def test_app_switch_wins_over_repo_variable(monkeypatch):
+    monkeypatch.setenv("WATCH_EASY_TARGET", "hr")
+    load_easy_target(StateDb("pace"))
+    assert easy_target() == "pace"
+    (step,) = garmin_workout(EASY_HR)["workoutSegments"][0]["workoutSteps"]
+    assert step["targetType"]["workoutTargetTypeKey"] == "pace.zone"
+    monkeypatch.setenv("WATCH_EASY_TARGET", "pace")
+    load_easy_target(StateDb("hr"))
+    assert easy_target() == "hr"
+
+
+def test_missing_app_setting_falls_back_to_repo_variable(monkeypatch):
+    monkeypatch.setenv("WATCH_EASY_TARGET", "pace")
+    load_easy_target(StateDb())
+    assert easy_target() == "pace"
+    load_easy_target(StateDb(fail=True))
+    assert easy_target() == "pace"
+    load_easy_target(StateDb("quatsch"))
+    assert easy_target() == "pace"
+    monkeypatch.delenv("WATCH_EASY_TARGET")
+    assert easy_target() == "hr"

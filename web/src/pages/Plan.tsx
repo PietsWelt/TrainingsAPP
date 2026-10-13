@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Sheet } from '../components/Sheet'
 import { toast } from '../lib/toast'
-import { Card, Pill, readableTint, Ring, SportIcon } from '../components/ui'
+import { Card, Pill, readableTint, Ring, Segmented, SportIcon } from '../components/ui'
 import { dateLabel } from '../lib/format'
-import { useAppState } from '../lib/appState'
+import { setState, useAppState } from '../lib/appState'
 import { guessType, markHandled, openSuggestions, type GarminRace } from '../lib/garminRaces'
 import { tap } from '../lib/haptics'
 import { coverage, FEEDBACK_LABEL, isPartial, progressOf, restoreOriginal } from '../lib/plan/adapt'
@@ -12,7 +12,7 @@ import type { GymByDate } from '../lib/dailyLog'
 import { WeekStrengthLine } from './Strength'
 import { fmtDuration, fmtPace, raceDistanceKm } from '../lib/plan/generate'
 import type { PlanState } from '../lib/plan/usePlan'
-import { HARD_KINDS, kindChip, plannedIntensity, stepLines, weekKinds, workoutAmount } from '../lib/plan/labels'
+import { EASY_TARGETS, hasHrStep, HARD_KINDS, kindChip, type EasyTarget, plannedIntensity, stepLines, weekKinds, workoutAmount } from '../lib/plan/labels'
 import { AnalysisBlock, FeedbackChips } from './PlanFeedback'
 import { analysisFor } from '../lib/plan/analyze'
 import { replacedBy } from '../lib/plan/catchup'
@@ -133,6 +133,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces,
           <PriorityCard arr={arr} event={selected} events={plan.events} onChange={() => setAskPrio(true)} />
           <RaceCheck event={selected} workouts={ownWorkouts} activities={activities ?? []} records={records ?? []} predictions={predictions} lactate={lactate} plan={plan} today={today} />
           <WeekList activities={activities} workouts={workouts} all={plan.workouts} gym={gym ?? {}} today={today} onOpen={setOpenId} onToggle={(w) => toggleDone(w)} />
+          {ownWorkouts.some((w) => w.date >= today && w.status === 'planned' && hasHrStep(w.steps)) && <EasyTargetCard />}
         </>
       )}
 
@@ -441,6 +442,29 @@ function Week({ monday, workouts, all, gym, today, activities, onOpen, onToggle 
   )
 }
 
+/** Puls oder Tempo als Ziel für ruhige Abschnitte auf der Uhr. Gilt für alle lockeren Läufe, ab dem nächsten Sync. */
+export function EasyTargetCard() {
+  const target = useAppState<EasyTarget>('watch.easy_target', 'hr')
+  return (
+    <Card title="Ziel auf der Uhr" subtitle="Für alle lockeren und Regenerationsläufe">
+      <Segmented
+        value={target}
+        options={EASY_TARGETS}
+        onChange={(v) => {
+          tap()
+          void setState('watch.easy_target', v)
+          toast(`Lockere Läufe kommen ab dem nächsten Sync mit ${v === 'hr' ? 'Puls' : 'Tempo'}-Ziel auf die Uhr.`)
+        }}
+      />
+      <p className="mt-2 text-xs text-ink-3">
+        {target === 'hr'
+          ? 'Die Uhr warnt, wenn dein Puls über der aeroben Schwelle liegt. Das Tempo ergibt sich, auch an heißen Tagen oder am Berg.'
+          : 'Die Uhr warnt, wenn du schneller oder langsamer als das Tempofenster bist. Regenerationsläufe laufen ohne Ziel, lieber zu langsam.'}
+      </p>
+    </Card>
+  )
+}
+
 function KindChip({ w }: { w: PlanWorkout }) {
   const c = kindChip(w)!
   return (
@@ -510,6 +534,7 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
   onRestore: () => Promise<void>
   onRate: (f: Feedback | null) => Promise<void>
 }) {
+  const easyTarget = useAppState<EasyTarget>('watch.easy_target', 'hr')
   const [busy, setBusy] = useState(false)
   const run = (f: () => Promise<void>) => async () => {
     setBusy(true)
@@ -577,10 +602,11 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
         </Card>
       )}
       <WhyCard w={w} />
+      {w.steps && hasHrStep(w.steps) && w.status === 'planned' && <EasyTargetCard />}
       {w.steps && w.steps.length > 1 && (
         <Card title="Ablauf auf der Uhr">
           <ol className="space-y-1.5 text-sm">
-            {stepLines(w.steps).map((line, i) => (
+            {stepLines(w.steps, easyTarget).map((line, i) => (
               <li key={i} className="flex gap-2">
                 <span className="w-4 shrink-0 text-ink-3">{i + 1}.</span>
                 <span>{line}</span>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mondayOf } from './dates'
 import { generatePlan } from './generate'
-import { kindChip, plannedIntensity, stepSeconds, weekKinds } from './labels'
+import { hasHrStep, kindChip, plannedIntensity, stepLines, stepSeconds, weekKinds } from './labels'
 import type { Fitness, PlanWorkout, RaceEvent } from './types'
 
 let n = 0
@@ -56,5 +56,21 @@ describe('Art der Einheit', () => {
     expect(kindChip(w({ kind: 'easy' }))).toBeNull()
     expect(kindChip(w({ kind: 'fartlek', title: 'Fahrtspiel' }))).toBeNull()
     expect(weekKinds([w({ kind: 'tempo' }), w({ kind: 'easy' }), w({ kind: 'long', distance_km: 18 })])).toBe('Schwelle, Lang 18 km')
+  })
+})
+
+describe('Ziel auf der Uhr', () => {
+  const easy = [{ type: 'run' as const, m: 8000, pace: 330, pace_slow: 370, hr_low: 128, hr_high: 148 }]
+  it('zeigt bei Puls den Pulsbereich, bei Tempo den Pace-Bereich', () => {
+    expect(stepLines(easy, 'hr')[0]).toContain('Puls 128–148')
+    const pace = stepLines(easy, 'pace')[0]
+    expect(pace).not.toContain('Puls')
+    expect(pace).toContain('5:30–6:10/km')
+  })
+  it('erkennt Puls-Schritte auch in Wiederholungen', () => {
+    expect(hasHrStep(easy)).toBe(true)
+    expect(hasHrStep([{ type: 'repeat', times: 2, steps: easy }])).toBe(true)
+    expect(hasHrStep([{ type: 'run', m: 1000, pace: 270 }])).toBe(false)
+    expect(hasHrStep(null)).toBe(false)
   })
 })
