@@ -5,6 +5,8 @@ import { tap } from '../lib/haptics'
 import { HEAT_EVIDENCE, heatAdvice, heatLevel, heatPace, heatPct, LEVEL_COLOR, LEVEL_TEXT, type HeatLevel } from '../lib/heat'
 import { fmtPace } from '../lib/plan/generate'
 import type { PlanWorkout, Step, WorkStep } from '../lib/plan/types'
+import type { EasyTarget } from '../lib/plan/labels'
+import { useAppState } from '../lib/appState'
 import { geoChoice, setGeoChoice, useForecast, type GeoChoice, type HourWeather } from '../lib/weather'
 
 const STATUS: Record<HeatLevel, Status> = { none: 'good', mild: 'good', moderate: 'warning', high: 'serious', extreme: 'critical' }
@@ -12,9 +14,9 @@ const SOURCE_TEXT = { device: 'an deinem Standort', last_run: 'am Startort deine
 const STEP_NAME: Record<WorkStep['type'], string> = { warmup: 'Einlaufen', run: 'Laufen', recover: 'Pause', cooldown: 'Auslaufen' }
 
 /** Alle Zieltempos des Laufs als „Name: Tempo“, ohne Doppelte. */
-function paceTargets(steps: Step[] | null | undefined): { name: string; pace: number; slow?: number }[] {
+function paceTargets(steps: Step[] | null | undefined, target: EasyTarget): { name: string; pace: number; slow?: number }[] {
   // Mit Puls-Ziel zählt der Puls, das Tempo ergibt sich: dafür kein angepasstes Tempo zeigen.
-  const flat = (steps ?? []).flatMap((s) => (s.type === 'repeat' ? s.steps : [s])).filter((s) => s.pace && s.hr_high == null)
+  const flat = (steps ?? []).flatMap((s) => (s.type === 'repeat' ? s.steps : [s])).filter((s) => s.pace && (target === 'pace' || s.hr_high == null))
   const seen = new Set<string>()
   const out: { name: string; pace: number; slow?: number }[] = []
   for (const s of flat) {
@@ -28,7 +30,8 @@ function paceTargets(steps: Step[] | null | undefined): { name: string; pace: nu
 }
 
 /** Erster Abschnitt mit Puls-Ziel (lockere Läufe mit bekannter aerober Schwelle). */
-function hrTarget(steps: Step[] | null | undefined): WorkStep | undefined {
+function hrTarget(steps: Step[] | null | undefined, target: EasyTarget): WorkStep | undefined {
+  if (target === 'pace') return undefined
   return (steps ?? []).flatMap((s) => (s.type === 'repeat' ? s.steps : [s])).find((s) => s.hr_low != null && s.hr_high != null)
 }
 
@@ -43,6 +46,7 @@ export function HeatCard({ workout, variant = 'card' }: { workout: PlanWorkout |
   const [why, setWhy] = useState(false)
   const [now] = useState(() => new Date())
   const [sheet, setSheet] = useState(false)
+  const easyTarget = useAppState<EasyTarget>('watch.easy_target', 'hr')
 
   const hours = useMemo(() => {
     if (!forecast) return []
@@ -111,8 +115,8 @@ export function HeatCard({ workout, variant = 'card' }: { workout: PlanWorkout |
   const sel = withPct.find((h) => h.time === picked) ?? withPct[0]
   const level = heatLevel(sel.pct)
   const maxPct = Math.max(...withPct.map((h) => h.pct))
-  const targets = paceTargets(workout.steps)
-  const hr = hrTarget(workout.steps)
+  const targets = paceTargets(workout.steps, easyTarget)
+  const hr = hrTarget(workout.steps, easyTarget)
   const today = hours[0]?.time.slice(0, 10)
   const firstTomorrow = hours.find((x) => x.time.slice(0, 10) !== today)?.time
   const hour = (h: HourWeather) => `${h.time.slice(0, 10) !== today ? 'Morgen ' : ''}${Number(h.time.slice(11, 13))} Uhr`

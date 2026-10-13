@@ -43,9 +43,29 @@ PACE_WINDOW_S = 5  # ± Sekunden pro km um das Zieltempo
 COLS = "id,date,sport,title,description,duration_min,distance_km,steps,status,garmin_workout_id,garmin_hash"
 
 
+# Einstellung aus der App (app_state, Schlüssel watch.easy_target). Gesetzt von load_easy_target().
+_app_target: str | None = None
+
+
 def easy_target() -> str:
-    """Repo-Variable WATCH_EASY_TARGET: ``hr`` (Standard) = Puls-Ziel für ruhige Abschnitte, ``pace`` = Tempo."""
-    return "pace" if os.getenv("WATCH_EASY_TARGET", "hr").strip().lower() == "pace" else "hr"
+    """Ziel für ruhige Abschnitte: ``hr`` (Standard) = Puls, ``pace`` = Tempo.
+
+    Vorrang hat der Umschalter in der App, sonst die Repo-Variable WATCH_EASY_TARGET.
+    """
+    raw = _app_target or os.getenv("WATCH_EASY_TARGET", "hr")
+    return "pace" if raw.strip().lower() == "pace" else "hr"
+
+
+def load_easy_target(db: Supabase) -> None:
+    """Liest den Umschalter aus der App. Fehlt die Tabelle (Migration 0017) oder der Eintrag, gilt die Repo-Variable."""
+    global _app_target
+    try:
+        rows = db.select("app_state", {"select": "value", "key": "eq.watch.easy_target"})
+    except Exception as e:  # noqa: BLE001
+        log.info("Ziel-Einstellung aus der App nicht lesbar: %s", type(e).__name__)
+        rows = []
+    value = rows[0].get("value") if rows else None
+    _app_target = value if value in ("hr", "pace") else None
 
 
 def _has_hr(steps: list[dict[str, Any]] | None) -> bool:
@@ -198,6 +218,7 @@ def push_workouts(client: Any, db: Supabase, today: date, days: int) -> dict[str
     stats = {"uploaded": 0, "unchanged": 0, "removed": 0, "failed": 0}
     if days <= 0:
         return stats
+    load_easy_target(db)
     until = today + timedelta(days=days)
     keep_from = today - timedelta(days=2)
     rows = db.select(
