@@ -282,14 +282,18 @@ def main() -> int:
         return 0
     except Exception as e:  # noqa: BLE001
         log.error("Sync fehlgeschlagen: %s (Details in sync_runs)", type(e).__name__)
-        db.update(
-            "sync_runs",
-            {"id": run["id"]},
-            {
-                "status": "error",
-                "finished_at": datetime.now(timezone.utc).isoformat(),
-                "message": f"{type(e).__name__}: {e}"[:500],
-            },
+        # Ist Supabase selbst nicht erreichbar, scheitert auch dieser Eintrag; der Fehlertyp oben bleibt dann die Auskunft.
+        safe(
+            lambda: db.update(
+                "sync_runs",
+                {"id": run["id"]},
+                {
+                    "status": "error",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "message": f"{type(e).__name__}: {e}"[:500],
+                },
+            ),
+            "Fehler in sync_runs eintragen",
         )
         return 1
 

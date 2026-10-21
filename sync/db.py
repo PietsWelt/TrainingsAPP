@@ -7,6 +7,22 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Supabase antwortet gelegentlich mit 502/503/504 oder gar nicht. Statt den ganzen Sync abzubrechen,
+# wird jede Anfrage bis zu 4-mal wiederholt: sofort, dann nach 6, 12 und 24 s. Alle Schreibzugriffe sind
+# Upserts oder Updates und damit wiederholbar; ein doppelter sync_runs-Eintrag wäre harmlos.
+RETRY = Retry(
+    total=4,
+    connect=4,
+    read=4,
+    status=4,
+    backoff_factor=3,
+    status_forcelist=(500, 502, 503, 504, 520, 522, 524),
+    allowed_methods=None,
+    raise_on_status=False,
+)
 
 
 def base_url(url: str) -> str:
@@ -21,6 +37,9 @@ class Supabase:
         key = (key or os.environ["SUPABASE_SERVICE_ROLE_KEY"]).strip()
         self.base = base_url(url) + "/rest/v1"
         self.session = requests.Session()
+        adapter = HTTPAdapter(max_retries=RETRY)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         self.session.headers.update({"apikey": key, "Content-Type": "application/json"})
         # Alte service_role-Keys sind JWTs und gehören zusätzlich in Authorization.
         # Neue sb_secret_-Keys sind keine JWTs; dort würde der Header mit "Invalid JWT" abgelehnt.
