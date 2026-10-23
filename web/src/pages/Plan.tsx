@@ -22,6 +22,7 @@ import type { Best } from '../lib/records'
 import { RaceCheck } from './PlanInsights'
 import { arrange, planScope } from '../lib/plan/multi'
 import { PrioritySheet, PriorityCard, PriorityQuestion, PrioStar } from './PlanPriority'
+import { canSwap, SwapIcon, SwapSheet } from './PlanSwap'
 import { EVENT_TYPES, eventTypeLabel, PHASE_LABEL, type EventType, type Feedback, type PlanWorkout, type RaceEvent } from '../lib/plan/types'
 
 
@@ -34,6 +35,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces,
   const suggestions = openSuggestions(garminRaces ?? [], plan.events, today, handled)
   const [openId, setOpenId] = useState<string | null>(null)
   const [askPrio, setAskPrio] = useState(false)
+  const [swapping, setSwapping] = useState(false)
   const arr = arrange(plan.events, today)
   const future = plan.events.filter((e) => arr.roles.has(e.id))
 
@@ -176,6 +178,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces,
           activities={activities}
           today={today}
           onClose={() => setOpenId(null)}
+          onSwap={canSwap(plan, opened, today) ? () => setSwapping(true) : undefined}
           onStatus={async (s) => {
             if (s === 'done') return toggleDone(opened).then(() => setOpenId(null))
             await plan.setStatus(opened, s)
@@ -199,6 +202,7 @@ export function Plan({ plan, gym, activities, records, predictions, garminRaces,
           }}
         />
       )}
+      {opened && swapping && <SwapSheet plan={plan} workout={opened} today={today} onClose={() => setSwapping(false)} />}
     </div>
   )
 }
@@ -524,11 +528,13 @@ function CheckButton({ w, onToggle }: { w: PlanWorkout; onToggle: (w: PlanWorkou
   )
 }
 
-function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip, onRestore, onRate }: {
+function WorkoutSheet({ workout: w, activities, today, onClose, onSwap, onStatus, onSkip, onRestore, onRate }: {
   workout: PlanWorkout
   activities?: Activity[]
   today: string
   onClose: () => void
+  /** Nur gesetzt, wenn es in der Woche einen Tag zum Tauschen gibt. */
+  onSwap?: () => void
   onStatus: (s: PlanWorkout['status']) => Promise<void>
   onSkip: () => Promise<void>
   onRestore: () => Promise<void>
@@ -544,35 +550,46 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
       setBusy(false)
     }
   }
+  const swap = onSwap && w.status === 'planned' && (
+    <button disabled={busy} onClick={onSwap} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
+      <SwapIcon />
+      Anderer Tag
+    </button>
+  )
   return (
     <Sheet
       title="Einheit"
       onClose={onClose}
       footer={
-        w.sport === 'race' ? undefined : w.original ? (
-          <div className={w.status === 'planned' ? 'grid grid-cols-2 gap-2' : ''}>
-            <button disabled={busy} onClick={run(onRestore)} className="min-h-12 w-full rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
-              Original zurück
-            </button>
-            {w.status === 'planned' && (
-              <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
-                Erledigt
+        w.sport === 'race' ? undefined : (
+          <>
+            {swap}
+            {w.original ? (
+              <div className={w.status === 'planned' ? 'grid grid-cols-2 gap-2' : ''}>
+                <button disabled={busy} onClick={run(onRestore)} className="min-h-12 w-full rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
+                  Original zurück
+                </button>
+                {w.status === 'planned' && (
+                  <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
+                    Erledigt
+                  </button>
+                )}
+              </div>
+            ) : w.status === 'planned' ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button disabled={busy} onClick={run(onSkip)} className="min-h-12 rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
+                  {w.date >= today ? 'Überspringen' : 'Ausgelassen'}
+                </button>
+                <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
+                  Erledigt
+                </button>
+              </div>
+            ) : (
+              <button disabled={busy} onClick={run(() => onStatus('planned'))} className="min-h-12 w-full rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
+                Zurücksetzen auf geplant
               </button>
             )}
-          </div>
-        ) : w.status === 'planned' ? (
-          <div className="grid grid-cols-2 gap-2">
-            <button disabled={busy} onClick={run(onSkip)} className="min-h-12 rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
-              {w.date >= today ? 'Überspringen' : 'Ausgelassen'}
-            </button>
-            <button disabled={busy} onClick={run(() => onStatus('done'))} className="min-h-12 rounded-xl btn-primary text-[15px] font-semibold disabled:opacity-60">
-              Erledigt
-            </button>
-          </div>
-        ) : (
-          <button disabled={busy} onClick={run(() => onStatus('planned'))} className="min-h-12 w-full rounded-xl bg-surface-2 text-[15px] font-semibold text-ink disabled:opacity-60">
-            Zurücksetzen auf geplant
-          </button>
+          </>
         )
       }
     >
@@ -616,7 +633,7 @@ function WorkoutSheet({ workout: w, activities, today, onClose, onStatus, onSkip
         </Card>
       )}
       {w.sport !== 'race' && w.status === 'planned' && !w.original && (
-        <p className="text-xs text-ink-3">Wichtige Einheiten verschiebe ich beim Überspringen nach Möglichkeit auf einen freien Tag derselben Woche. Läufe mit der Uhr werden nach dem Sync automatisch abgehakt.</p>
+        <p className="text-xs text-ink-3">Wichtige Einheiten verschiebe ich beim Überspringen nach Möglichkeit auf einen freien Tag derselben Woche. Passt dir ein anderer Tag besser, tausche über „Anderer Tag“. Läufe mit der Uhr werden nach dem Sync automatisch abgehakt.</p>
       )}
     </Sheet>
   )
