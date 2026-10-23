@@ -3,7 +3,7 @@
 
 import { sportGroup, GROUP_LABEL } from '../format'
 import type { Activity } from '../types'
-import { skipWorkout, scaleWorkout } from './adapt'
+import { restoreOriginal, skipWorkout, scaleWorkout, snapshot } from './adapt'
 import { addDays, daysBetween } from './dates'
 import type { PlanWorkout } from './types'
 
@@ -120,7 +120,8 @@ export function reentry(all: PlanWorkout[], activities: Activity[], today: strin
     const s = steps[week]
     if (!s) continue
     if (races.some((r) => r >= w.date && daysBetween(w.date, r) < 7)) continue
-    let x = scaleWorkout(w, s.factor)
+    // Original merken: „Original zurück“ und undoReentry() stellen die Einheit wieder her.
+    let x = { ...scaleWorkout(w, s.factor), original: w.original ?? snapshot(w) }
     if (s.easy && w.key_session && w.kind !== 'long') {
       x = {
         ...x,
@@ -137,4 +138,35 @@ export function reentry(all: PlanWorkout[], activities: Activity[], today: strin
   if (!changed.length) return { changed, messages: [] }
   const weeks = steps.length === 1 ? 'Diese Woche ist' : `Die nächsten ${steps.length} Wochen sind`
   return { changed, messages: [`${pause} Tage Pause erkannt. ${weeks} leichter, damit du sicher wieder reinkommst.`] }
+}
+
+/**
+ * Längste Lücke ohne Ausdauertraining (ab 15 min) in den letzten `days` Tagen bis heute.
+ * Eine Lücke, die vor dem Zeitraum beginnt, zählt ab seinem Anfang mit.
+ */
+export function longestGap(activities: Activity[], today: string, days = 42): number {
+  const start = addDays(today, -days)
+  const dates = [...new Set(activities.filter((a) => isEndurance(a) && (a.duration_s ?? 0) >= 15 * 60 && a.local_date >= start && a.local_date <= today).map((a) => a.local_date))].sort()
+  if (!dates.length) return days
+  let gap = daysBetween(start, dates[0]) - 1
+  for (let i = 1; i < dates.length; i++) gap = Math.max(gap, daysBetween(dates[i - 1], dates[i]) - 1)
+  return Math.max(gap, daysBetween(dates[dates.length - 1], today) - 1)
+}
+
+/**
+ * Nimmt einen Wiedereinstieg zurück, wenn es in den letzten 6 Wochen gar keine Pause gab. Das passiert,
+ * wenn die App mit altem Gerätespeicher gerechnet hat, bevor die neuen Läufe geladen waren.
+ * Ohne gemerktes Original (ältere Anpassungen) kommt die Einheit aus dem frisch berechneten Plan (`fresh`).
+ */
+export function undoReentry(all: PlanWorkout[], activities: Activity[], today: string, fresh: PlanWorkout[]): CatchUp {
+  const marked = all.filter((w) => w.status === 'planned' && w.date >= today && w.title.includes(REENTRY))
+  if (!marked.length || longestGap(activities, today) >= 5) return { changed: [], messages: [] }
+  const changed = marked.map((w) => {
+    if (w.original) return restoreOriginal(w)
+    const f = fresh.find((x) => x.event_id === w.event_id && x.sport === w.sport && x.date === (w.moved_from ?? w.date))
+    if (!f) return { ...w, title: w.title.replace(` · ${REENTRY}`, '') }
+    const { kind, title, description, duration_min, distance_km, key_session } = f
+    return { ...w, kind, title, description, duration_min, distance_km, key_session, steps: f.steps ?? null }
+  })
+  return { changed, messages: ['Es gab keine Trainingspause: Wiedereinstieg zurückgenommen, die Einheiten sind wieder wie geplant.'] }
 }

@@ -55,13 +55,15 @@ function Main() {
   const [tab, setTab] = useState<Tab>('today')
   // Sofort der letzte Stand vom Gerät, frische Daten kommen im Hintergrund.
   const [data, setData] = useState<Dataset | null>(readCache)
+  // Erst nach dem ersten Laden vom Server sind die Daten vollständig; vorher rechnet der Plan nichts um.
+  const [fresh, setFresh] = useState(false)
   const [day, setDay] = useState(localToday)
   const loadedAt = useRef(0)
   const hinted = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
-  const plan = usePlan(data?.activities, day, data?.days, data?.records, data?.lactate, data?.lastSync?.id ?? null)
+  const plan = usePlan(data?.activities, day, data?.days, data?.records, data?.lactate, data?.lastSync?.id ?? null, fresh)
   const log = useDailyLog()
 
   // Neuester Stand für refresh(), ohne dass refresh bei jeder Änderung neu entsteht.
@@ -82,6 +84,7 @@ function Main() {
           setData(d)
           writeCache(d)
         }
+        setFresh(true)
         setError(null)
         // Fehlende SQL-Dateien: einmal pro Sitzung sagen, welche.
         if (!hinted.current && (appState.missing || d.meta?.incremental === false)) {
