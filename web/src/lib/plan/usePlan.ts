@@ -5,7 +5,7 @@ import type { Best } from '../records'
 import type { Activity, DailyMetrics, GarminLactate } from '../types'
 import { autoComplete, fillSteps, needsSteps, giveFeedback, isPartial, refreshDurations, refreshHrTargets, skipWorkout } from './adapt'
 import { analyzeRun, merge, shiftPaces } from './analyze'
-import { catchUp, reentry } from './catchup'
+import { catchUp, reentry, REENTRY, undoReentry } from './catchup'
 import { sportGroup } from '../format'
 import { toast } from '../toast'
 import { addDays, localToday } from './dates'
@@ -76,6 +76,8 @@ export function usePlan(
   records: Best[] = NO_RECORDS,
   lactate: GarminLactate[] = NO_LACTATE,
   syncId: number | null = null,
+  /** false, solange nur der Gerätespeicher da ist: Dann fehlen evtl. die letzten Läufe, also nichts nachholen oder umbauen. */
+  live = true,
 ): PlanState {
   const [events, setEvents] = useState<RaceEvent[]>([])
   const [workouts, setWorkouts] = useState<PlanWorkout[]>([])
@@ -91,7 +93,7 @@ export function usePlan(
       const today = day
       const hour = new Date().getHours()
       // Ein anderes Gerät hat für diesen Stand schon nachgeholt und geschützt: dann nicht noch einmal (und keine doppelten Meldungen).
-      const maintain = !alreadyMaintained(getState<Maintained | null>('plan.maintained', null), today, syncId, hour)
+      const maintain = live && !alreadyMaintained(getState<Maintained | null>('plan.maintained', null), today, syncId, hour)
       const released = new Set(readReleased())
       const usable = activities.filter((a) => !released.has(a.id))
       const done = autoComplete(ws, usable, today)
@@ -151,7 +153,16 @@ export function usePlan(
         const notes = [...guard.messages, ...dl.messages]
         if (notes.length) toast(`Plan angepasst: ${notes.join(' ')}`)
       }
-      const all = merge(done, filled, tidy, hr, dur, analyzed, safety)
+      // Fälschlich erkannte Pause (alter Gerätespeicher) rückgängig machen. Läuft auf frischen Daten immer, nicht nur einmal pro Halbtag.
+      let undo: PlanWorkout[] = []
+      if (live && current.some((w) => w.status === 'planned' && w.date >= today && w.title.includes(REENTRY))) {
+        const base = current.some((w) => w.title.includes(REENTRY) && !w.original) ? generateAll(ev, fitness, addDays(today, -1), () => crypto.randomUUID()) : []
+        const un = undoReentry(current, activities, today, base)
+        current = current.map((w) => un.changed.find((c) => c.id === w.id) ?? w)
+        undo = un.changed
+        if (un.messages.length) toast(`Plan angepasst: ${un.messages.join(' ')}`)
+      }
+      const all = merge(done, filled, tidy, hr, dur, analyzed, safety, undo)
       if (all.length) await planStore.updateWorkouts(all)
       if (maintain && ev.length) void setState('plan.maintained', { date: today, syncId, afternoon: hour >= 12 } satisfies Maintained)
       const byId = new Map(current.map((w) => [w.id, w]))
@@ -163,7 +174,7 @@ export function usePlan(
     } finally {
       setLoading(false)
     }
-  }, [activities, day, metrics, records, lactate, syncId])
+  }, [activities, day, metrics, records, lactate, syncId, live])
 
   useEffect(() => {
     void reload()

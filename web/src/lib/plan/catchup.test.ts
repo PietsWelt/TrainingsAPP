@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catchUp, pauseDays, reentry, reentrySteps, REENTRY } from './catchup'
+import { catchUp, longestGap, pauseDays, reentry, reentrySteps, REENTRY, undoReentry } from './catchup'
 import { addDays } from './dates'
 import type { PlanWorkout } from './types'
 import type { Activity } from '../types'
@@ -83,5 +83,41 @@ describe('reentry', () => {
   it('keeps race week untouched', () => {
     const plan = [wk({ date: addDays(TODAY, 2) }), wk({ date: addDays(TODAY, 5), sport: 'race', kind: 'race' })]
     expect(reentry(plan, runs(['2026-09-25']), TODAY).changed).toHaveLength(0)
+  })
+})
+
+describe('undoReentry', () => {
+  const runs = (dates: string[]) => dates.map((d) => act({ local_date: d }))
+  const steady = runs(Array.from({ length: 21 }, (_, i) => addDays(TODAY, -2 * i)))
+
+  it('measures the longest gap without endurance training', () => {
+    expect(longestGap(steady, TODAY)).toBe(1)
+    expect(longestGap(runs([addDays(TODAY, -10), TODAY]), TODAY, 14)).toBe(9)
+    expect(longestGap([], TODAY)).toBe(42)
+  })
+
+  it('remembers the original, so the reentry can be undone', () => {
+    const w = wk({ date: addDays(TODAY, 1), distance_km: 10 })
+    const { changed } = reentry([w], runs([addDays(TODAY, -8)]), TODAY)
+    expect(changed[0].original?.distance_km).toBe(10)
+  })
+
+  it('restores workouts when there was no pause after all', () => {
+    const w = wk({ date: addDays(TODAY, 1), distance_km: 8, title: `Lockerer Lauf · ${REENTRY}`, original: { kind: 'easy', title: 'Lockerer Lauf', description: null, duration_min: 50, distance_km: 10, key_session: false, status: 'planned', steps: null } })
+    const { changed, messages } = undoReentry([w], steady, TODAY, [])
+    expect(changed[0]).toMatchObject({ title: 'Lockerer Lauf', distance_km: 10, original: null })
+    expect(messages[0]).toContain('keine Trainingspause')
+  })
+
+  it('takes older reentries without original from the fresh plan, by their original day', () => {
+    const w = wk({ date: addDays(TODAY, 2), moved_from: addDays(TODAY, 1), kind: 'intervals', key_session: true, distance_km: 7.2, title: `Intervalle · ${REENTRY}` })
+    const f = wk({ date: addDays(TODAY, 1), kind: 'intervals', key_session: true, distance_km: 9, title: 'Intervalle' })
+    const { changed } = undoReentry([w], steady, TODAY, [f])
+    expect(changed[0]).toMatchObject({ id: w.id, date: addDays(TODAY, 2), title: 'Intervalle', distance_km: 9 })
+  })
+
+  it('keeps a real reentry', () => {
+    const w = wk({ date: addDays(TODAY, 1), title: `Lockerer Lauf · ${REENTRY}` })
+    expect(undoReentry([w], runs([addDays(TODAY, -9), addDays(TODAY, -1)]), TODAY, []).changed).toHaveLength(0)
   })
 })
