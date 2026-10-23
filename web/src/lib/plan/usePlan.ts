@@ -12,6 +12,7 @@ import { addDays, localToday } from './dates'
 import { fitnessFrom } from './fitness'
 import { generateAll } from './multi'
 import { deload, longRunGuard, overloadCheck } from './overload'
+import { swapWorkouts } from './swap'
 import { addToList, appState, getState, setState } from '../appState'
 import { hasColumn, planStore } from './store'
 import type { Feedback, PlanWorkout, RaceEvent } from './types'
@@ -27,6 +28,8 @@ export interface PlanState {
   setPriority(id: string): Promise<void>
   setStatus(w: PlanWorkout, status: PlanWorkout['status']): Promise<void>
   skip(w: PlanWorkout): Promise<string>
+  /** Legt eine Einheit auf einen anderen Tag der Woche und tauscht sie mit der Einheit dort. */
+  swap(w: PlanWorkout, date: string): Promise<string>
   /** Speichert beliebige geänderte Einheiten (z.B. Anpassung an die Readiness). */
   applyChanges(changed: PlanWorkout[]): Promise<void>
   /** Plant alle kommenden Rennen ab morgen neu, z.B. damit die Tempos zur gemessenen Schwelle passen. */
@@ -242,6 +245,12 @@ export function usePlan(
     },
     async skip(w) {
       const { changed, message } = skipWorkout(workouts, w.id, localToday())
+      await planStore.updateWorkouts(changed)
+      apply(changed)
+      return message
+    },
+    async swap(w, date) {
+      const { changed, message } = swapWorkouts(workouts, w, date)
       await planStore.updateWorkouts(changed)
       apply(changed)
       return message

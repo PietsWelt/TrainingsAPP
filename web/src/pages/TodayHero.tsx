@@ -14,6 +14,7 @@ import type { DailyLogState } from '../lib/useDailyLog'
 import { CheckInCard } from './CheckIn'
 import { HeatCard } from './Heat'
 import { OverloadCard } from './Overload'
+import { canSwap, SwapSheet } from './PlanSwap'
 import { ProposalCard, ReadinessCard } from './TodayReadiness'
 
 function garminStatus(score: number): { status: Status; text: string } {
@@ -73,7 +74,9 @@ export function TodayHero({ data, plan, log, own, today, strengthToday, onOpenPl
 /** Die geplanten Einheiten von heute, mit Umfang, kurzer Erklärung und „Warum?“. */
 function PlannedToday({ plan, today, onOpenPlan }: { plan: PlanState; today: string; onOpenPlan: () => void }) {
   const [why, setWhy] = useState<string | null>(null)
+  const [swapId, setSwapId] = useState<string | null>(null)
   const ws = plan.workouts.filter((w) => w.date === today && w.status !== 'skipped')
+  const swapping = ws.find((w) => w.id === swapId)
   const race = (id: string) => plan.events.find((e) => e.id === id)?.name
   async function toggle(w: PlanWorkout) {
     const done = w.status !== 'done'
@@ -97,6 +100,7 @@ function PlannedToday({ plan, today, onOpenPlan }: { plan: PlanState; today: str
         <ul>
           {ws.map((w) => {
             const e = explain(w)
+            const swappable = w.status === 'planned' && w.sport !== 'race' && canSwap(plan, w, today)
             return (
               <li key={w.id} className="py-1">
                 <div className="flex items-center">
@@ -118,12 +122,22 @@ function PlannedToday({ plan, today, onOpenPlan }: { plan: PlanState; today: str
                     </button>
                   )}
                 </div>
-                {e && (
+                {(e || swappable) && (
                   <p className="mt-0.5 text-xs text-ink-2">
-                    {e.short}{' '}
-                    <button onClick={() => setWhy(why === w.id ? null : w.id)} aria-expanded={why === w.id} className="font-semibold text-accent">
-                      {why === w.id ? 'Weniger' : 'Warum?'}
-                    </button>
+                    {e && (
+                      <>
+                        {e.short}{' '}
+                        <button onClick={() => setWhy(why === w.id ? null : w.id)} aria-expanded={why === w.id} className="font-semibold text-accent">
+                          {why === w.id ? 'Weniger' : 'Warum?'}
+                        </button>
+                      </>
+                    )}
+                    {e && swappable && <span className="text-ink-3"> · </span>}
+                    {swappable && (
+                      <button onClick={() => setSwapId(w.id)} className="font-semibold text-accent">
+                        Anderer Tag?
+                      </button>
+                    )}
                   </p>
                 )}
                 {e && why === w.id && (
@@ -137,6 +151,7 @@ function PlannedToday({ plan, today, onOpenPlan }: { plan: PlanState; today: str
           })}
         </ul>
       )}
+      {swapping && <SwapSheet plan={plan} workout={swapping} today={today} onClose={() => setSwapId(null)} />}
     </div>
   )
 }
