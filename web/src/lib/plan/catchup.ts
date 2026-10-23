@@ -141,20 +141,21 @@ export function reentry(all: PlanWorkout[], activities: Activity[], today: strin
 }
 
 /**
- * Längste Lücke ohne Ausdauertraining (ab 15 min) in den letzten `days` Tagen bis heute.
- * Eine Lücke, die vor dem Zeitraum beginnt, zählt ab seinem Anfang mit.
+ * Längste Lücke ohne Ausdauertraining (ab 15 min), die in den letzten `days` Tagen geendet hat (oder noch andauert).
+ * 23 Tage: Ein Wiedereinstieg dauert höchstens 3 Wochen und beginnt bis zu 2 Tage nach der Pause. Ältere Pausen
+ * können keinen Wiedereinstieg mehr erklären, der heute noch im Plan steht. Ohne Training davor zählt das als Pause.
  */
-export function longestGap(activities: Activity[], today: string, days = 42): number {
-  const start = addDays(today, -days)
-  const dates = [...new Set(activities.filter((a) => isEndurance(a) && (a.duration_s ?? 0) >= 15 * 60 && a.local_date >= start && a.local_date <= today).map((a) => a.local_date))].sort()
-  if (!dates.length) return days
-  let gap = daysBetween(start, dates[0]) - 1
-  for (let i = 1; i < dates.length; i++) gap = Math.max(gap, daysBetween(dates[i - 1], dates[i]) - 1)
-  return Math.max(gap, daysBetween(dates[dates.length - 1], today) - 1)
+export function longestGap(activities: Activity[], today: string, days = 23): number {
+  const dates = [...new Set(activities.filter((a) => isEndurance(a) && (a.duration_s ?? 0) >= 15 * 60 && a.local_date <= today).map((a) => a.local_date))].sort()
+  const from = addDays(today, -days)
+  if (!dates.length || dates[0] >= from) return Infinity
+  let gap = daysBetween(dates[dates.length - 1], today) - 1
+  for (let i = 1; i < dates.length; i++) if (dates[i] >= from) gap = Math.max(gap, daysBetween(dates[i - 1], dates[i]) - 1)
+  return gap
 }
 
 /**
- * Nimmt einen Wiedereinstieg zurück, wenn es in den letzten 6 Wochen gar keine Pause gab. Das passiert,
+ * Nimmt einen Wiedereinstieg zurück, wenn es in den letzten gut 3 Wochen gar keine Pause gab. Das passiert,
  * wenn die App mit altem Gerätespeicher gerechnet hat, bevor die neuen Läufe geladen waren.
  * Ohne gemerktes Original (ältere Anpassungen) kommt die Einheit aus dem frisch berechneten Plan (`fresh`).
  */

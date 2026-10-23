@@ -92,8 +92,15 @@ describe('undoReentry', () => {
 
   it('measures the longest gap without endurance training', () => {
     expect(longestGap(steady, TODAY)).toBe(1)
-    expect(longestGap(runs([addDays(TODAY, -10), TODAY]), TODAY, 14)).toBe(9)
-    expect(longestGap([], TODAY)).toBe(42)
+    expect(longestGap(runs([addDays(TODAY, -40), addDays(TODAY, -10), TODAY]), TODAY)).toBe(29)
+    expect(longestGap([], TODAY)).toBe(Infinity)
+  })
+
+  it('ignores pauses that ended too long ago to explain a reentry today', () => {
+    const back = runs([addDays(TODAY, -60), ...Array.from({ length: 11 }, (_, i) => addDays(TODAY, -2 * i - 1))])
+    expect(longestGap(back, TODAY)).toBe(38)
+    const later = runs([addDays(TODAY, -60), addDays(TODAY, -40), ...Array.from({ length: 13 }, (_, i) => addDays(TODAY, -2 * i))])
+    expect(longestGap(later, TODAY)).toBe(1)
   })
 
   it('remembers the original, so the reentry can be undone', () => {
