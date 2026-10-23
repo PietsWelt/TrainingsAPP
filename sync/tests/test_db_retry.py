@@ -1,8 +1,12 @@
 import json
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
-import db
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import db  # noqa: E402
 
 
 def serve(statuses):

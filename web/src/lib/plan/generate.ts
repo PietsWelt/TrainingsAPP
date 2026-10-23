@@ -241,9 +241,39 @@ interface Draft {
 const r1 = (x: number) => Math.round(x * 10) / 10
 const r5 = (x: number) => Math.max(20, Math.round(x / 5) * 5)
 
+/** Mittleres lockeres Tempo in s/km (ohne Tempos 6:00/km). */
+const easyMid = (p: Paces | null) => (p ? (p.easy[0] + p.easy[1]) / 2 : 360)
+
 function runMinutes(km: number, p: Paces | null, factor = 1): number {
-  const pace = p ? (p.easy[0] + p.easy[1]) / 2 : 360
-  return Math.round((km * pace * factor) / 60 / 5) * 5
+  return Math.round((km * easyMid(p) * factor) / 60 / 5) * 5
+}
+
+/**
+ * Geschätzte Dauer (s) und Strecke (m) eines Ablaufs, inklusive Ein- und Auslaufen und Trabpausen.
+ * Schritte ohne Tempo-Ziel (Einlaufen, Pausen, nur Puls) zählen mit `easyPace`, Bereiche mit ihrer Mitte.
+ * Schritte bis zur Rundentaste zählen nicht.
+ */
+export function stepTotals(steps: Step[], easyPace: number): { s: number; m: number } {
+  let s = 0
+  let m = 0
+  for (const st of steps) {
+    const list = st.type === 'repeat' ? st.steps : [st]
+    const times = st.type === 'repeat' ? st.times : 1
+    for (const x of list) {
+      const pace = x.pace ? (x.pace_slow ? (x.pace + x.pace_slow) / 2 : x.pace) : easyPace
+      const sec = x.time_s ?? (x.m ? (x.m / 1000) * pace : 0)
+      s += sec * times
+      m += (x.m ?? (sec / pace) * 1000) * times
+    }
+  }
+  return { s, m }
+}
+
+/** Dauer und Strecke aus dem Ablauf, damit Ein- und Auslaufen und Pausen in der Zeitangabe stecken. */
+function fitToSteps(d: Draft, p: Paces | null): Draft {
+  if (!d.steps?.length) return d
+  const t = stepTotals(d.steps, easyMid(p))
+  return { ...d, duration_min: r5(t.s / 60), distance_km: r1(t.m / 1000) }
 }
 
 // Bausteine für die Uhr
@@ -270,7 +300,12 @@ export const hrText = (aet: number | null | undefined, recovery = false) => {
 }
 const meters = (km: number) => Math.round(km * 10) * 100
 
+/** Qualitätseinheit (bzw. lockerer Lauf mit Steigerungen). Dauer und Strecke folgen dem Ablauf. */
 function runQuality(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null, aet?: number | null): Draft {
+  return fitToSteps(qualityDraft(slot, type, phase, pw, km, p, aet), p)
+}
+
+function qualityDraft(slot: 'Q1' | 'Q2', type: RunEventType, phase: Phase, pw: number, km: number, p: Paces | null, aet?: number | null): Draft {
   const short = type === '5k' || type === '10k'
   const base = { sport: 'run' as Sport, distance_km: r1(km), duration_min: runMinutes(km, p, 0.92), key_session: true }
   const wu = 'Ein- und Auslaufen je 10–15 min locker.'
@@ -385,8 +420,7 @@ export const LONG_MAX_MIN: Record<RunEventType, number> = { '5k': 90, '10k': 105
 
 /** Strecke, die in `LONG_MAX_MIN` passt (mit dem Faktor 1,03 wie in `runMinutes` für lange Läufe). */
 export function longCapKm(type: RunEventType, p: Paces | null): number {
-  const pace = p ? (p.easy[0] + p.easy[1]) / 2 : 360
-  return (LONG_MAX_MIN[type] * 60) / (pace * 1.03)
+  return (LONG_MAX_MIN[type] * 60) / (easyMid(p) * 1.03)
 }
 
 const fmtHours = (min: number) => (min % 60 ? `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')} h` : `${min / 60} h`)
@@ -436,17 +470,20 @@ function runEasy(km: number, p: Paces | null, recovery = false, aet?: number | n
 
 function runWeek(type: RunEventType, phase: Phase, pw: number, km: number, roles: RunRole[], p: Paces | null, longCap = Infinity, aet?: number | null): Map<RunRole, Draft> {
   const spec = RUN[type]
-  const qCount = roles.filter((r) => r === 'Q1' || r === 'Q2').length
   const wanted = Math.min(longCap, spec.longMax, Math.max(spec.longMin * (phase === 'taper' ? 0.7 : 1), km * 0.3))
   const timeCap = longCapKm(type, p)
   const long = Math.min(wanted, timeCap)
   const q = Math.min(16, Math.max(6, km * 0.17))
   const easyRoles = roles.filter((r) => r === 'E' || r === 'R').length
+  const q1 = runQuality('Q1', type, phase, pw, q, p, aet)
+  const q2 = runQuality('Q2', type, phase, pw, q, p, aet)
+  // Tatsächliche Strecke der Qualitätseinheiten (mit Ein- und Auslaufen), damit der Wochenumfang stimmt.
+  const qKm = roles.reduce((a, r) => a + (r === 'Q1' ? (q1.distance_km ?? q) : r === 'Q2' ? (q2.distance_km ?? q) : 0), 0)
   // Ein lockerer Lauf soll nie länger als ~70 % des langen Laufs werden; bei wenigen Tagen sinkt dann der Wochenumfang.
-  const easy = easyRoles ? Math.min(long * 0.7, Math.max(4, (km - long - q * qCount) / easyRoles)) : 0
+  const easy = easyRoles ? Math.min(long * 0.7, Math.max(4, (km - long - qKm) / easyRoles)) : 0
   const m = new Map<RunRole, Draft>()
-  m.set('Q1', runQuality('Q1', type, phase, pw, q, p, aet))
-  m.set('Q2', runQuality('Q2', type, phase, pw, q, p, aet))
+  m.set('Q1', q1)
+  m.set('Q2', q2)
   m.set('L', runLong(type, phase, pw, long, p, wanted > timeCap, aet))
   m.set('E', runEasy(easy, p, false, aet))
   m.set('R', runEasy(Math.min(easy, 6), p, true, aet))
@@ -503,7 +540,9 @@ function triWeek(type: TriEventType, phase: Phase, pw: number, hours: number, ro
     ),
   )
   const rqd = runQuality('Q1', TRI[type].runLike, phase, pw, 8, null)
-  m.set('RQ', { ...d('run', rqd.kind, `Laufen: ${rqd.title}`, rqd.description, run * rq, rqd.key_session), steps: rqd.kind === 'strides' ? undefined : rqd.steps })
+  // Mit Ablauf gilt dessen Dauer (inklusive Ein- und Auslaufen), sonst der Anteil am Wochenbudget.
+  const rqSteps = rqd.kind === 'strides' ? undefined : rqd.steps
+  m.set('RQ', { ...d('run', rqd.kind, `Laufen: ${rqd.title}`, rqd.description, rqSteps ? (rqd.duration_min ?? run * rq) : run * rq, rqd.key_session), steps: rqSteps })
   m.set('RL', d('run', 'long', 'Langer Lauf', 'Ruhig und gleichmäßig (Zone 2).', run * rl, true))
   m.set('RE', d('run', 'easy', 'Lockerer Lauf', 'Locker (Zone 2).', run * re, false))
   return m
@@ -524,7 +563,7 @@ function raceWeek(event: RaceEvent, p: Paces | null): [number, Draft][] {
     distance_km: null,
     key_session: false,
   })
-  const sharpener: Draft = {
+  const sharpener: Draft = fitToSteps({
     sport: 'run',
     kind: 'race_pace',
     title: 'Vorbelastung',
@@ -533,7 +572,7 @@ function raceWeek(event: RaceEvent, p: Paces | null): [number, Draft][] {
     distance_km: null,
     key_session: true,
     steps: [{ ...WU, time_s: 15 * 60 }, repeat(3, work({ m: 1000, pace: pz('race', p), note: 'Wettkampftempo' }), jog({ time_s: 120 })), CD],
-  }
+  }, p)
   if (tri) {
     out.push([-5, easy(30, 'swim')])
     out.push([-4, { ...easy(60, 'bike'), title: 'Rad: Vorbelastung', description: 'Locker mit 3 × 3 min im Wettkampftempo.', kind: 'race_pace', key_session: true }])

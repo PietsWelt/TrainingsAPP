@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Best } from '../records'
 import type { Activity, DailyMetrics, GarminLactate } from '../types'
-import { autoComplete, fillSteps, needsSteps, giveFeedback, isPartial, refreshHrTargets, skipWorkout } from './adapt'
+import { autoComplete, fillSteps, needsSteps, giveFeedback, isPartial, refreshDurations, refreshHrTargets, skipWorkout } from './adapt'
 import { analyzeRun, merge, shiftPaces } from './analyze'
 import { catchUp, reentry } from './catchup'
 import { sportGroup } from '../format'
@@ -116,6 +116,9 @@ export function usePlan(
       // Puls-Ziele für lockere Läufe an die aktuelle aerobe Schwelle anpassen.
       const hr = hasColumn('steps') ? refreshHrTargets(current, fitness.aetHr, today) : []
       current = current.map((w) => hr.find((c) => c.id === w.id) ?? w)
+      // Dauer älterer Einheiten inklusive Ein- und Auslaufen und Trabpausen.
+      const dur = hasColumn('steps') ? refreshDurations(current, today) : []
+      current = current.map((w) => dur.find((c) => c.id === w.id) ?? w)
       let analyzed: PlanWorkout[] = []
       if (hasColumn('feedback') && activities) {
         for (const w of current) {
@@ -145,7 +148,7 @@ export function usePlan(
         const notes = [...guard.messages, ...dl.messages]
         if (notes.length) toast(`Plan angepasst: ${notes.join(' ')}`)
       }
-      const all = merge(done, filled, tidy, hr, analyzed, safety)
+      const all = merge(done, filled, tidy, hr, dur, analyzed, safety)
       if (all.length) await planStore.updateWorkouts(all)
       if (maintain && ev.length) void setState('plan.maintained', { date: today, syncId, afternoon: hour >= 12 } satisfies Maintained)
       const byId = new Map(current.map((w) => [w.id, w]))

@@ -5,7 +5,7 @@ import { sportGroup } from '../format'
 import type { Activity } from '../types'
 import { addDays, daysBetween, mondayOf, WEEKDAY_LONG, weekday } from './dates'
 import type { Readiness } from '../readiness'
-import { hrRange, hrText } from './generate'
+import { hrRange, hrText, stepTotals } from './generate'
 import type { Feedback, Kind, PlanWorkout, Step, WorkStep } from './types'
 
 export interface Change {
@@ -416,4 +416,31 @@ export function refreshHrTargets(workouts: PlanWorkout[], aetHr: number | null |
     changed.push({ ...w, steps, description: description.trim() })
   }
   return changed
+}
+
+/**
+ * Dauer und Strecke künftiger Einheiten mit Ablauf an den Ablauf angleichen. Ältere Pläne rechneten Ein- und
+ * Auslaufen und Trabpausen nicht mit, die Zeitangabe lag dadurch oft 10–20 min neben der echten Dauer.
+ * Nur Qualitätseinheiten und Läufe mit Steigerungen, nur ab 5 min Abweichung; angepasste Einheiten bleiben.
+ */
+export function refreshDurations(workouts: PlanWorkout[], today: string): PlanWorkout[] {
+  const changed: PlanWorkout[] = []
+  for (const w of workouts) {
+    if (w.sport !== 'run' || w.status !== 'planned' || w.date < today || !w.steps?.length || w.original) continue
+    if (!QUALITY.includes(w.kind) && w.kind !== 'strides') continue
+    const t = stepTotals(w.steps, easyPaceOf(w))
+    const min = Math.max(20, Math.round(t.s / 60 / 5) * 5)
+    if (w.duration_min != null && Math.abs(min - w.duration_min) < 5) continue
+    changed.push({ ...w, duration_min: min, distance_km: Math.round(t.m / 100) / 10 })
+  }
+  return changed
+}
+
+/** Lockeres Tempo einer Einheit: aus einem ruhigen Abschnitt (Bereich), sonst aus der bisherigen Planung (Faktor 0,92). */
+function easyPaceOf(w: PlanWorkout): number {
+  const flat = (w.steps ?? []).flatMap((s) => (s.type === 'repeat' ? s.steps : [s]))
+  const calm = flat.find((s) => s.pace != null && s.pace_slow != null)
+  if (calm) return (calm.pace! + calm.pace_slow!) / 2
+  if (w.duration_min && w.distance_km) return (w.duration_min * 60) / w.distance_km / 0.92
+  return 360
 }

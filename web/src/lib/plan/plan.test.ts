@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { autoComplete, coverage, fillSteps, needsSteps, isPartial, giveFeedback, legsProposal, progressOf, readinessProposal, refreshHrTargets, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
+import { autoComplete, coverage, fillSteps, needsSteps, isPartial, giveFeedback, legsProposal, progressOf, readinessProposal, refreshDurations, refreshHrTargets, restoreOriginal, scaleWorkout, skipWorkout } from './adapt'
 import { addDays, weekday } from './dates'
 import { stepLines } from './labels'
-import { deloadWeeks, generatePlan, longCapKm, LONG_MAX_MIN, MAX_GAIN, pacesFor, paceSchedule, peakKm, phasesFor, planThreshold, volumesFor } from './generate'
+import { deloadWeeks, generatePlan, longCapKm, LONG_MAX_MIN, MAX_GAIN, pacesFor, paceSchedule, peakKm, phasesFor, planThreshold, stepTotals, volumesFor } from './generate'
 import { explain } from './explain'
 import { alreadyMaintained } from './usePlan'
 import type { Readiness } from '../readiness'
@@ -508,5 +508,40 @@ describe('alreadyMaintained', () => {
     expect(alreadyMaintained(m, TODAY, 9, 9)).toBe(false)
     expect(alreadyMaintained(m, TODAY, 8, 14)).toBe(false)
     expect(alreadyMaintained(m, addDays(TODAY, 1), 8, 9)).toBe(false)
+  })
+})
+
+describe('Dauer inklusive Ein- und Auslaufen', () => {
+  const easy = (pacesFor('half', 6300)!.easy[0] + pacesFor('half', 6300)!.easy[1]) / 2
+  it('rechnet Ein- und Auslaufen und Trabpausen in Dauer und Strecke ein', () => {
+    const plan = generatePlan(ev(), fit, TODAY, id)
+    const quality = plan.filter((w) => w.sport === 'run' && w.steps?.length && ['tempo', 'intervals', 'fartlek', 'race_pace', 'strides'].includes(w.kind))
+    expect(quality.length).toBeGreaterThan(5)
+    for (const w of quality) {
+      const t = stepTotals(w.steps!, easy)
+      expect(Math.abs(w.duration_min! - t.s / 60)).toBeLessThanOrEqual(5)
+      expect(w.distance_km!).toBeCloseTo(t.m / 1000, 0)
+    }
+    // Ein Schwellenlauf mit 12 min Einlaufen und 10 min Auslaufen dauert mindestens so lange wie Arbeit plus beides.
+    const tempo = quality.find((w) => w.kind === 'tempo')!
+    const work = tempo.steps!.flatMap((s) => (s.type === 'repeat' ? Array(s.times).fill(s.steps).flat() : [s])).reduce((a, s) => a + (s.time_s ?? 0), 0)
+    expect(tempo.duration_min! * 60).toBeGreaterThanOrEqual(work - 150)
+  })
+  it('gleicht ältere Pläne an und ändert danach nichts mehr', () => {
+    const steps = [
+      { type: 'warmup' as const, time_s: 12 * 60 },
+      { type: 'repeat' as const, times: 3, steps: [{ type: 'run' as const, time_s: 600, pace: 280 }, { type: 'recover' as const, time_s: 120 }] },
+      { type: 'cooldown' as const, time_s: 10 * 60 },
+    ]
+    // Alte Berechnung: 9,4 km × 6:00/km × 0,92 ≈ 50 min, der Ablauf dauert aber 58 min.
+    const old = wk({ kind: 'tempo', title: 'Schwellenlauf', key_session: true, duration_min: 50, distance_km: 9.4, steps })
+    const [fixed] = refreshDurations([old], '2026-10-01')
+    expect(fixed.duration_min).toBe(60)
+    expect(fixed.distance_km).toBeCloseTo(11, 0)
+    expect(refreshDurations([fixed], '2026-10-01')).toEqual([])
+    // Vergangenes, Angepasstes und Läufe ohne Ablauf bleiben.
+    expect(refreshDurations([old], '2026-10-07')).toEqual([])
+    expect(refreshDurations([{ ...old, original: { ...old } }], '2026-10-01')).toEqual([])
+    expect(refreshDurations([{ ...old, steps: null }], '2026-10-01')).toEqual([])
   })
 })
